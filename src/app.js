@@ -17,6 +17,8 @@ import {
   parseBackup,
   wipeLocal,
   requestDurableStorage,
+  saveMeal,
+  removeMeal,
 } from "./store.js";
 import {
   targets,
@@ -24,20 +26,24 @@ import {
   applyDecay,
   liveDelta,
   settleDay,
+  reopenDay,
   scoringProfile,
   currentKg,
   logWeighIn,
+  deleteWeighIn,
   heatCalendar,
   weightPath,
+  weightMovingAverage,
   clampHeat,
   RANKS,
 } from "./engine.js";
 import { lineForLive, verdictCopy, heatCaption, morningFrom } from "./coach.js";
-import { searchLocal, scaleFood, searchAnywhere, FOODS } from "./foods.js";
+import { searchLocal, scaleFood, rescaleItem, searchAnywhere, FOODS, getUsdaKey, setUsdaKey } from "./foods.js";
 import { SLOTS, defaultSlot, slotName, normalizeSlot, clockTime } from "./meals.js";
+import { barcodeSupported, lookupBarcode, scanBarcode } from "./barcode.js";
 import { createFlame } from "./flame.js";
 import { rankMark } from "./ranks.js";
-import { APP_NAME, applyTheme } from "./themes.js";
+import { APP_NAME, THEMES, heatBand, applyTheme } from "./themes.js";
 import { registerPwa, canInstall, promptInstall, isStandalone } from "./pwa.js";
 
 if (import.meta.env.PROD) registerPwa();
@@ -58,8 +64,22 @@ let workoutKind = "lift";
 let workoutMins = 45;
 let workoutNote = "";
 let saveMsg = "";
+let editingFoodId = null;
+let lastShownHeat = null;
+let stamp = null; // verdict-stamp payload after closing the day
 
-applyTheme();
+const NAV_ICONS = {
+  arena: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5c1 4.5 6.5 6.5 6.5 12a6.5 6.5 0 0 1-13 0c0-5.5 5.5-7.5 6.5-12z"/><path d="M12 11c.5 2.2 2.6 3 2.6 5.4a2.6 2.6 0 0 1-5.2 0C9.4 14 11.5 13.2 12 11z"/></svg>`,
+  fuel: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v7M4.5 3v4a2.5 2.5 0 0 0 5 0V3M7 10v11"/><path d="M17 3c-1.8 1.5-2.5 3.5-2.5 6H17v12M17 3v18"/></svg>`,
+  train: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h3M19 12h3M6.5 8v8M17.5 8v8M9.5 6v12M14.5 6v12M6.5 12h11"/></svg>`,
+  verdict: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.5 5.5L20 9.5l-4 4 1 5.8L12 16.5 7 19.3l1-5.8-4-4 5.5-1z"/></svg>`,
+  self: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5c1.2-3.6 4-5.5 7.5-5.5s6.3 1.9 7.5 5.5"/></svg>`,
+  bolt: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L5 13.5h5L10.5 22 19 10h-5.5z"/></svg>`,
+  muscle: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 3.5a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2 2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h2a2 2 0 0 1 2 2 2 2 0 0 1 2-2h5a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2 2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2" transform="rotate(45 12 12)"/><path d="M9 15l6-6"/></svg>`,
+  calendar: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg>`,
+};
+
+applyTheme(state.theme);
 applyDecay(state);
 if (state.profile && (!state.weighIns || !state.weighIns.length)) {
   state.weighIns = [{ id: "seed", day: todayKey(), kg: state.profile.kg, at: Date.now() }];
@@ -69,6 +89,11 @@ requestDurableStorage();
 
 function profile() {
   return scoringProfile(state);
+}
+
+// True once today's verdict is settled and in history.
+function settledToday() {
+  return Boolean(today().verdictShown && state.history[0]?.day === todayKey());
 }
 
 function prettyDay(key) {
@@ -83,9 +108,10 @@ function prettyDay(key) {
 function snapshot() {
   const day = today();
   const live = liveDelta(day, profile(), state.heat);
-  const locked = Boolean(day.verdictShown && state.history[0]?.day === todayKey());
+  const locked = settledToday();
   const heat = locked ? state.heat : clampHeat(state.heat + live.preview);
-  return { day, live, locked, heat };
+  const lockedDelta = locked ? state.history[0]?.delta ?? 0 : 0;
+  return { day, live, locked, heat, lockedDelta };
 }
 
 function ashFor(snap) {
@@ -170,7 +196,7 @@ function segs(heat) {
   }).join("");
 }
 
-function gauge(pct, title, big, sub, glow) {
+function gauge(pct, title, big, sub, glow, icon) {
   const r = 46;
   const c = 2 * Math.PI * r;
   const p = Math.max(0, Math.min(1.08, pct));
@@ -178,8 +204,8 @@ function gauge(pct, title, big, sub, glow) {
   const id = "g" + title.replace(/\W/g, "");
   const show = p > 0.02;
   return `
-    <div class="gauge ${glow ? "lit" : ""}">
-      <svg viewBox="0 0 120 120">
+    <div class="gauge ${glow ? "lit" : ""}" role="img" aria-label="${title}: ${sub} (${big})">
+      <svg viewBox="0 0 120 120" aria-hidden="true">
         <defs>
           <linearGradient id="${id}grad" x1="0" y1="0" x2="1" y2="1">
             <stop offset="0%" stop-color="${title === "Protein" ? "var(--gauge-p-from)" : "var(--gauge-from)"}"/>
@@ -211,6 +237,7 @@ function gauge(pct, title, big, sub, glow) {
         }
       </svg>
       <div class="g-copy">
+        ${icon ? `<span class="g-ico" aria-hidden="true">${icon}</span>` : ""}
         <small>${title}</small>
         <b>${big}</b>
         <em>${sub}</em>
@@ -271,6 +298,7 @@ function addFood(item, template, usedAmount) {
 }
 
 function commitFood(item, template, usedAmount) {
+  if (settledToday()) return; // day is settled; the swing is already banked
   if (fuelMode === "plan") {
     addPlanItem(state, planDay, mealSlot, item);
     if (template) rememberFood(state, template, usedAmount);
@@ -281,7 +309,8 @@ function commitFood(item, template, usedAmount) {
 }
 
 function render() {
-  applyTheme();
+  applyTheme(state.theme);
+  document.documentElement.dataset.heatBand = heatBand(state.heat);
   if (flame) {
     flame.destroy();
     flame = null;
@@ -301,12 +330,59 @@ function render() {
   stage.append(nav());
   root.append(stage);
 
+  if (stamp) {
+    stage.append(verdictStamp());
+  }
+
   const canvas = stage.querySelector(".burst canvas");
   if (canvas) {
     const snap = snapshot();
     flame = createFlame(canvas);
     flame.setHeat(snap.heat);
   }
+
+  // Tick the heat number from its previous value; cheap drama, honest numbers.
+  const heatEl = stage.querySelector(".heat-num b");
+  if (heatEl) {
+    const target = Number(heatEl.textContent) || 0;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (lastShownHeat !== null && lastShownHeat !== target && !reduce) {
+      tickNumber(heatEl, lastShownHeat, target, 520);
+    }
+    lastShownHeat = target;
+  }
+}
+
+function tickNumber(node, from, to, ms) {
+  const start = performance.now();
+  const step = (now) => {
+    const p = Math.min(1, (now - start) / ms);
+    const eased = 1 - Math.pow(1 - p, 3);
+    node.textContent = String(Math.round(from + (to - from) * eased));
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+function verdictStamp() {
+  const overlay = el(`
+    <div class="verdict-stamp" role="alertdialog" aria-label="Day verdict">
+      <div class="stamp-card">
+        <div class="stamp-rule"></div>
+        <h2 class="stamp-headline">${escapeHtml(stamp.headline)}</h2>
+        <div class="stamp-delta ${stamp.delta >= 0 ? "up" : "down"}">${stamp.delta >= 0 ? "+" : ""}${stamp.delta}<span> heat</span></div>
+        <p class="stamp-body">${escapeHtml(stamp.body)}</p>
+        <p class="tiny">+${stamp.xpGain} XP banked · streak ${state.streak}d</p>
+        <button class="btn" type="button">See the ledger</button>
+      </div>
+    </div>
+  `);
+  overlay.querySelector("button").onclick = () => {
+    stamp = null;
+    tab = "verdict";
+    render();
+  };
+  return overlay;
 }
 
 function chrome() {
@@ -335,11 +411,14 @@ function nav() {
     ["self", "Self"],
   ];
   const n = el(`
-    <nav class="nav">
+    <nav class="nav" aria-label="Sections">
       ${tabs
         .map(
           ([id, label]) =>
-            `<button type="button" data-tab="${id}" class="${tab === id ? "active" : ""}">${label}</button>`
+            `<button type="button" data-tab="${id}" class="${tab === id ? "active" : ""}" aria-current="${tab === id ? "page" : "false"}">
+        <span class="nav-ico" aria-hidden="true">${NAV_ICONS[id]}</span>
+        <span class="nav-label">${label}</span>
+      </button>`
         )
         .join("")}
     </nav>
@@ -362,14 +441,18 @@ function meterClass(value, target, invertOver = true) {
 
 function arena() {
   const snap = snapshot();
-  const { live, heat, locked } = snap;
+  const { live, heat, locked, lockedDelta } = snap;
+  document.documentElement.dataset.heatBand = heatBand(heat);
   const coach = ashFor(snap);
   const r = rankFor(state.xp);
   const t = live.t;
   const tot = live.tot;
+  const swing = locked ? lockedDelta : live.preview;
+  const backupAgeDays = state.lastBackupAt ? Math.floor((Date.now() - state.lastBackupAt) / 86400000) : null;
   const box = el(`
     <section class="screen">
-      <div class="glass heat-card">
+      <div class="glass heat-card" style="--h:${(heat / 100).toFixed(3)}">
+        <div class="heat-decor" aria-hidden="true"></div>
         <div class="heat-stage">
           <div class="burst">
             <canvas></canvas>
@@ -379,21 +462,32 @@ function arena() {
         <p class="heat-cap">${escapeHtml(heatCaption(heat))}</p>
         <div class="seg-bar">${segs(heat)}</div>
       </div>
-      <div class="coach ${coach.tone}">
-        <div class="who">${escapeHtml(coach.who)}</div>
+      <div class="coach ${coach.tone}" aria-live="polite">
+        <div class="coach-head">
+          <div class="who">${escapeHtml(coach.who)}</div>
+          <span class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+        </div>
         <p>${escapeHtml(coach.text)}</p>
       </div>
       <div class="rank-line">
         <span class="rank-name">Rank · ${rankMark(r.name, 28)} <b>${escapeHtml(r.name)}</b></span>
-        <span>${locked ? "Locked" : "Live"} swing · <b class="${live.preview >= 0 ? "up" : "down"}">${live.preview >= 0 ? "+" : ""}${live.preview}</b></span>
+        <span class="swing-line">${locked ? "Locked" : "Live"} swing · <b class="swing-pill ${swing >= 0 ? "up" : "down"}">${swing >= 0 ? "+" : ""}${swing}</b></span>
       </div>
       <div class="tiny rank-sub">${escapeHtml(r.title)}${r.next ? ` · next ${escapeHtml(r.next)}` : ""}</div>
       <div class="rank-track fat"><i style="width:${Math.round(r.progress * 100)}%"></i></div>
+      ${
+        backupAgeDays === null || backupAgeDays >= 14
+          ? `<p class="tiny backup-nag">${backupAgeDays === null ? "No backup yet. All of this burns with one browser reset — Self → Download backup." : `Last backup ${backupAgeDays} days ago. The fire lives in one browser. Copy it out.`}</p>`
+          : ""
+      }
       <div class="glass log-card">
-        <header>Daily log</header>
+        <header class="log-head">
+          <span>Daily log</span>
+          <span class="today-chip">${NAV_ICONS.calendar} Today</span>
+        </header>
         <div class="gauges">
-          ${gauge(t.kcal ? tot.kcal / t.kcal : 0, "Energy", `${t.kcal} kcal`, `${Math.round(tot.kcal)} / ${t.kcal}`, tot.kcal > 0)}
-          ${gauge(t.protein ? tot.protein / t.protein : 0, "Protein", `${t.protein} g`, `${Math.round(tot.protein)} / ${t.protein}`, tot.protein > 0)}
+          ${gauge(t.kcal ? tot.kcal / t.kcal : 0, "Energy", `${t.kcal} kcal`, `${Math.round(tot.kcal)} / ${t.kcal}`, tot.kcal > 0, NAV_ICONS.bolt)}
+          ${gauge(t.protein ? tot.protein / t.protein : 0, "Protein", `${t.protein} g`, `${Math.round(tot.protein)} / ${t.protein}`, tot.protein > 0, NAV_ICONS.muscle)}
         </div>
         <div class="mini-rings">
           <div class="ring-row">
@@ -406,7 +500,8 @@ function arena() {
           </div>
         </div>
         <div class="train-row">
-          <span>Training · <b>${live.trained ? "Stoked" : "Silent"}</b></span>
+          <span class="train-label">Training</span>
+          <span class="train-badge ${live.trained ? "on" : ""}">${NAV_ICONS.train}${live.trained ? "Stoked" : "Silent"}</span>
           <div class="meter ${live.trained ? "good" : ""}"><i style="width:${live.trained ? 100 : 6}%"></i></div>
         </div>
         ${timeLogHtml(snap.day.foods)}
@@ -454,17 +549,21 @@ function fuel() {
   const snap = snapshot();
   const day = snap.day;
   const live = snap.live;
+  const locked = snap.locked;
   const recents = state.recents || [];
   const favs = state.favorites || [];
+  const meals = state.meals || [];
   const box = el(`
     <section class="screen">
       <div class="glass pad fuel-hero">
         <header class="kicker">Fuel</header>
         <div class="panel-num">${Math.round(live.tot.kcal)}<span> / ${live.t.kcal} kcal</span></div>
         <p class="heat-cap">${
-          fuelMode === "plan"
-            ? `Planning ${slotName(mealSlot)} · does not move Heat until you eat it.`
-            : `Live heat ${snap.heat}. Logging ${slotName(mealSlot)}.`
+          locked
+            ? "Today is settled. This log is a diary entry now — Verdict → Reopen today if it needs to count."
+            : fuelMode === "plan"
+              ? `Planning ${slotName(mealSlot)} · does not move Heat until you eat it.`
+              : `Live heat ${snap.heat}. Logging ${slotName(mealSlot)}.`
         }</p>
         <div class="meter fat"><i style="width:${Math.min(100, (live.tot.kcal / Math.max(live.t.kcal, 1)) * 100)}%"></i></div>
         <div class="chips" id="modes"></div>
@@ -473,15 +572,29 @@ function fuel() {
       </div>
       <div class="glass pad">
         <header class="kicker">Pantry · ${FOODS.length} on device</header>
-        <p class="tiny">Type a food. Local hits first, then USDA + packaged barcodes. Results cache for two weeks.</p>
+        <p class="tiny">Type a food. Local hits first, then packaged products + USDA. Results cache for two weeks.</p>
         <div class="search">
           <input id="q" placeholder="200g penne, chicken thigh, carbonara…" value="${escapeHtml(foodQuery)}" />
         </div>
+        <div class="barcode-row">
+          ${barcodeSupported() ? `<button class="btn ghost" id="scan" type="button">Scan barcode</button>` : ""}
+          <input id="code-in" inputmode="numeric" placeholder="…or type a barcode" aria-label="Barcode number" />
+          <button class="btn ghost" id="code-go" type="button">Find</button>
+        </div>
+        <p class="tiny" id="code-status"></p>
         <p class="tiny" id="lookup-status"></p>
         <div id="scaler" class="${selectedFood ? "" : "hidden"}"></div>
         <div id="usual"></div>
         <div class="list" id="hits"></div>
       </div>
+      ${
+        meals.length && !locked
+          ? `<div class="glass pad">
+        <header class="kicker">Saved meals</header>
+        <div class="list" id="meals"></div>
+      </div>`
+          : ""
+      }
       <div class="glass pad custom-offer">
         <header class="kicker">Custom offering</header>
         <p class="lede">If it isn't in the pantry, log it. Guessing low is how Heat lies.</p>
@@ -492,7 +605,7 @@ function fuel() {
           <div class="field"><label>Carbs</label><input id="ccarb" type="number" value="20" /></div>
           <div class="field"><label>Fat</label><input id="cfat" type="number" value="8" /></div>
         </div>
-        <button class="btn ghost" type="button" id="cadd">${fuelMode === "plan" ? "Add custom to plan" : "Log custom"}</button>
+        <button class="btn ghost" type="button" id="cadd" ${locked ? "disabled" : ""}>${fuelMode === "plan" ? "Add custom to plan" : "Log custom"}</button>
       </div>
       <div class="glass pad">
         <header class="kicker" id="diary-kicker">${fuelMode === "plan" ? "Meal plan" : "Today's plate"}</header>
@@ -556,6 +669,42 @@ function fuel() {
   const q = box.querySelector("#q");
   const status = box.querySelector("#lookup-status");
 
+  async function findBarcode(code) {
+    const codeStatus = box.querySelector("#code-status");
+    if (!code) return;
+    codeStatus.textContent = `Code ${code} — looking up…`;
+    try {
+      const f = await lookupBarcode(code);
+      selectedFood = f;
+      amount = f.unit === "serving" ? f.lastAmount || 1 : 100;
+      render();
+    } catch (err) {
+      codeStatus.textContent =
+        err.message === "cancelled"
+          ? ""
+          : err.message === "not found"
+            ? "Not in Open Food Facts. Log it as a custom offering."
+            : err.message === "no nutrition data"
+              ? "That product has no nutrition data. Log it custom."
+              : "Lookup failed. Check the number, or log it custom.";
+    }
+  }
+
+  const scanBtn = box.querySelector("#scan");
+  if (scanBtn) {
+    scanBtn.onclick = async () => {
+      try {
+        const code = await scanBarcode();
+        findBarcode(code);
+      } catch {
+        /* scan modal handles its own errors */
+      }
+    };
+  }
+  box.querySelector("#code-go").onclick = () => {
+    findBarcode(box.querySelector("#code-in").value);
+  };
+
   function drawHits() {
     hits.innerHTML = "";
     foodHits.forEach((f) => hits.append(foodButton(f)));
@@ -587,8 +736,9 @@ function fuel() {
         <label class="amt-label">${unit}</label>
         <div class="amount-row">
           <input id="amt" type="number" min="0.1" step="${byServing ? 0.5 : 5}" value="${amount}" />
-          <button class="btn" id="add" style="width:auto;padding:12px 18px">${fuelMode === "plan" ? "Plan" : "Log"}</button>
+          <button class="btn" id="add" style="width:auto;padding:12px 18px" ${locked ? "disabled" : ""}>${fuelMode === "plan" ? "Plan" : "Log"}</button>
         </div>
+        ${locked ? `<p class="tiny">Today is settled — reopen it in Verdict to log.</p>` : ""}
         <div class="tiny preview-macros">${preview.kcal} kcal · ${preview.protein}p · ${preview.carbs}c · ${preview.fat}f</div>
         <button class="btn ghost" id="pin">${pinned ? "Unpin" : "Pin this"}</button>
       </div>
@@ -649,7 +799,7 @@ function fuel() {
                 <div class="meta">${f.amount}${f.unit === "serving" ? " serving" : "g"} · ${f.kcal} kcal</div>
               </div>
               <div class="row-acts">
-                ${planDay === todayKey() ? `<button class="eat" type="button">Eat</button>` : ""}
+                ${planDay === todayKey() && !locked ? `<button class="eat" type="button">Eat</button>` : ""}
                 <button class="x" type="button" aria-label="remove">×</button>
               </div>
             </div>
@@ -673,28 +823,122 @@ function fuel() {
       });
       return;
     }
-    if (!day.foods.length) {
+    if (!day.foods.length && !state.days[yesterdayKey()]?.foods?.length && !meals.length) {
       plate.append(el(`<div class="empty">Nothing logged. The fire is not impressed.</div>`));
       return;
     }
+    const yesterday = state.days[yesterdayKey()];
     SLOTS.forEach((s) => {
       const items = day.foods
         .filter((f) => normalizeSlot(f.slot || "dinner") === s.id)
         .sort((a, b) => (a.loggedAt || 0) - (b.loggedAt || 0));
-      if (!items.length) return;
-      plate.append(el(`<div class="meal-label">${s.name}</div>`));
+      const yItems = (yesterday?.foods || []).filter((f) => normalizeSlot(f.slot || "dinner") === s.id);
+      if (!items.length && !yItems.length) return;
+      const label = el(`
+        <div class="meal-label label-row">
+          <span>${s.name}</span>
+          <span class="label-acts">
+            ${
+              yItems.length && !locked
+                ? `<button class="repeat-y" type="button" aria-label="Repeat yesterday's ${s.name}">Repeat yesterday · ${yItems.length}</button>`
+                : ""
+            }
+            ${items.length >= 2 && !locked ? `<button class="save-meal" type="button">Save as meal</button>` : ""}
+          </span>
+        </div>
+      `);
+      const repeatBtn = label.querySelector(".repeat-y");
+      if (repeatBtn) {
+        repeatBtn.onclick = () => {
+          yItems.forEach((f) => {
+            const { id, slot, loggedAt, ...rest } = f;
+            addFood({ ...rest, id: crypto.randomUUID(), slot: s.id, loggedAt: Date.now() });
+          });
+          persist();
+          render();
+        };
+      }
+      const saveMealBtn = label.querySelector(".save-meal");
+      if (saveMealBtn) {
+        saveMealBtn.onclick = () => {
+          const name = prompt(`Name this ${s.name.toLowerCase()}`);
+          if (!name) return;
+          saveMeal(state, {
+            id: crypto.randomUUID(),
+            name: name.trim().slice(0, 40),
+            slot: s.id,
+            items: items.map((f) => ({
+              name: f.name,
+              amount: f.amount,
+              unit: f.unit,
+              kcal: f.kcal,
+              protein: f.protein,
+              carbs: f.carbs || 0,
+              fat: f.fat || 0,
+              base: f.base || null,
+            })),
+          });
+          persist();
+          render();
+        };
+      }
+      plate.append(label);
       items.forEach((f) => {
         const when = clockTime(f.loggedAt);
+        if (editingFoodId === f.id && f.base) {
+          const editor = el(`
+            <div class="row edit-row">
+              <div class="edit-fields">
+                <strong>${escapeHtml(f.name)}</strong>
+                <div class="amount-row">
+                  <input class="e-amt" type="number" min="0.1" step="${f.unit === "serving" ? 0.5 : 5}" value="${f.amount}" aria-label="New amount" />
+                  <span class="tiny">${f.unit === "serving" ? "servings" : "g"}</span>
+                  <button class="btn e-save" type="button" style="width:auto;padding:10px 14px">Save</button>
+                  <button class="btn ghost e-cancel" type="button" style="width:auto;padding:10px 14px">Keep</button>
+                </div>
+                <em class="tiny">Numbers move Heat — fix the truth, not the vibe.</em>
+              </div>
+            </div>
+          `);
+          editor.querySelector(".e-cancel").onclick = () => {
+            editingFoodId = null;
+            drawPlate();
+          };
+          editor.querySelector(".e-save").onclick = () => {
+            const nextAmount = Number(editor.querySelector(".e-amt").value);
+            if (nextAmount > 0) {
+              const d = today();
+              d.foods = d.foods.map((x) => (x.id === f.id ? rescaleItem(x, nextAmount) : x));
+              setDay(state, todayKey(), d);
+              persist();
+            }
+            editingFoodId = null;
+            render();
+          };
+          editor.querySelector(".e-amt").select();
+          plate.append(editor);
+          return;
+        }
         const row = el(`
           <div class="row">
             <div>
               <strong>${escapeHtml(f.name)}</strong>
               <div class="meta">${when ? when + " · " : ""}${f.amount}${f.unit === "serving" ? " serving" : "g"} · ${f.kcal} kcal · ${f.protein}p · ${Math.round(f.carbs || 0)}c · ${Math.round(f.fat || 0)}f</div>
             </div>
-            <button class="x" aria-label="remove">×</button>
+            <div class="row-acts">
+              ${f.base ? `<button class="edit" type="button" aria-label="Edit amount of ${escapeHtml(f.name)}">±</button>` : ""}
+              <button class="x" type="button" aria-label="remove">×</button>
+            </div>
           </div>
         `);
-        row.querySelector("button").onclick = () => {
+        const editBtn = row.querySelector(".edit");
+        if (editBtn) {
+          editBtn.onclick = () => {
+            editingFoodId = f.id;
+            drawPlate();
+          };
+        }
+        row.querySelector(".x").onclick = () => {
           const d = today();
           d.foods = d.foods.filter((x) => x.id !== f.id);
           setDay(state, todayKey(), d);
@@ -706,9 +950,52 @@ function fuel() {
     });
   }
 
+  function drawMeals() {
+    const wrap = box.querySelector("#meals");
+    if (!wrap) return;
+    meals.forEach((m) => {
+      const kcal = m.items.reduce((n, f) => n + f.kcal, 0);
+      const row = el(`
+        <div class="row">
+          <div>
+            <strong>${escapeHtml(m.name)}</strong>
+            <div class="meta">${m.items.length} items · ${kcal} kcal → ${slotName(mealSlot)}</div>
+          </div>
+          <div class="row-acts">
+            <button class="log-meal" type="button">Log</button>
+            <button class="x" type="button" aria-label="remove">×</button>
+          </div>
+        </div>
+      `);
+      row.querySelector(".log-meal").onclick = () => {
+        m.items.forEach((f) => {
+          addFood(
+            {
+              ...f,
+              id: crypto.randomUUID(),
+              slot: mealSlot,
+              loggedAt: Date.now(),
+            },
+            null,
+            f.amount
+          );
+        });
+        persist();
+        render();
+      };
+      row.querySelector(".x").onclick = () => {
+        removeMeal(state, m.id);
+        persist();
+        render();
+      };
+      wrap.append(row);
+    });
+  }
+
   let lookupTimer = 0;
   q.oninput = () => {
     foodQuery = q.value;
+    pendingGrams = null; // stale grams from an earlier "200g …" search must not leak into the next pick
     foodHits = searchLocal(foodQuery);
     drawHits();
     clearTimeout(lookupTimer);
@@ -722,12 +1009,12 @@ function fuel() {
       try {
         const found = await searchAnywhere(typed);
         if (q.value !== typed) return;
-        pendingGrams = found.grams;
+        pendingGrams = found.grams ?? null;
         foodHits = found.foods;
         drawHits();
         const remote = found.foods.filter((f) => String(f.id).startsWith("usda-") || String(f.id).startsWith("off-")).length;
         status.textContent = remote
-          ? `Local + USDA + packaged foods.${found.grams ? ` Using ${found.grams}g.` : ""}`
+          ? `Local + packaged + USDA.${found.grams ? ` Using ${found.grams}g.` : ""}`
           : found.foods.length
             ? `Local pantry.${found.grams ? ` Using ${found.grams}g.` : ""}`
             : "Nothing found. Try another name, or log custom.";
@@ -740,7 +1027,9 @@ function fuel() {
   drawHits();
   drawScaler();
   drawPlate();
+  drawMeals();
   box.querySelector("#cadd").onclick = () => {
+    if (locked) return;
     const name = box.querySelector("#cname").value.trim() || "Unnamed regret";
     const kcal = Number(box.querySelector("#ckcal").value) || 0;
     const protein = Number(box.querySelector("#cpro").value) || 0;
@@ -778,12 +1067,17 @@ function train() {
     ["rest", "Rest (real)"],
   ];
   const snap = snapshot();
+  const locked = snap.locked;
   const box = el(`
     <section class="screen">
       <div class="glass pad">
         <header class="kicker">Train</header>
         <div class="panel-num">${snap.heat}<span> HEAT</span></div>
-        <p class="heat-cap">If you didn't move, don't log theater.</p>
+        <p class="heat-cap">${
+          locked
+            ? "Today is settled — training goes to tomorrow's fire. Reopen the day in Verdict if it must count."
+            : "If you didn't move, don't log theater."
+        }</p>
         <div class="chips" id="kinds"></div>
         <div class="field">
           <label>Minutes</label>
@@ -793,7 +1087,7 @@ function train() {
           <label>What actually happened</label>
           <input id="note" value="${escapeHtml(workoutNote)}" placeholder="Push + pull. Or 'I walked the dog like an adult.'" />
         </div>
-        <button class="btn" id="log">Log session</button>
+        <button class="btn" id="log" ${locked ? "disabled" : ""}>Log session</button>
       </div>
       <div class="glass pad">
         <header class="kicker">Today's sessions</header>
@@ -813,6 +1107,7 @@ function train() {
     chips.append(b);
   });
   box.querySelector("#log").onclick = () => {
+    if (locked) return;
     const d = today();
     workoutMins = Number(box.querySelector("#mins").value) || 0;
     workoutNote = box.querySelector("#note").value.trim();
@@ -858,14 +1153,43 @@ function verdict() {
   const last = state.history[0];
   const kg = currentKg(state);
   const path = weightPath(state.weighIns);
+  const maPath = weightMovingAverage(state.weighIns, 5);
   const hist = state.history.slice(0, 21);
   const snap = snapshot();
+  const locked = snap.locked;
+
+  const hist30 = [...state.history].slice(0, 30).reverse();
+  const barW = hist30.length ? 320 / hist30.length : 320;
+  const bars = hist30
+    .map((h, i) => {
+      const height = Math.max(2, (h.heat / 100) * 68);
+      return `<rect class="${h.delta >= 0 ? "up" : "down"}" x="${(i * barW + 1).toFixed(1)}" y="${(70 - height).toFixed(1)}" width="${Math.max(2, barW - 2).toFixed(1)}" height="${height.toFixed(1)}" rx="1.5"/>`;
+    })
+    .join("");
+  const heatTrend = hist30.length
+    ? `<svg class="heat-trend" viewBox="0 0 320 72" preserveAspectRatio="none" role="img" aria-label="Heat over the last ${hist30.length} settled days">${bars}</svg>`
+    : "";
+
+  const week = state.history.slice(0, 7);
+  let weekly = null;
+  if (week.length) {
+    const mean = (fn) => week.reduce((a, h) => a + fn(h), 0) / week.length;
+    weekly = {
+      n: week.length,
+      avgKcal: Math.round(mean((h) => h.tot.kcal)),
+      avgT: Math.round(mean((h) => h.t.kcal)),
+      avgProtein: Math.round(mean((h) => h.tot.protein)),
+      avgDelta: Math.round(mean((h) => h.delta) * 10) / 10,
+    };
+  }
+
   const box = el(`
     <section class="screen">
       <div class="glass pad" id="card"></div>
       <div class="actions">
-        <button class="btn" id="close">${day.verdictShown && last?.day === todayKey() ? "Today is locked" : "Close today"}</button>
-        <button class="btn ghost" id="confess">${day.confessed ? "Confession noted" : "Confess a slip (honesty +heat)"}</button>
+        <button class="btn" id="close">${locked ? "Today is locked" : "Close today"}</button>
+        <button class="btn ghost" id="confess">${day.confessed ? "Confession noted" : "Confess a slip (counts on a bad-calorie day)"}</button>
+        ${locked ? `<button class="btn ghost" id="reopen">Reopen today</button>` : ""}
       </div>
       <div class="glass pad trace">
         <header class="kicker">The scale</header>
@@ -875,7 +1199,7 @@ function verdict() {
         </header>
         ${
           path.d
-            ? `<svg class="weight-line" viewBox="0 0 320 72" preserveAspectRatio="none"><path d="${path.d}" /></svg>`
+            ? `<svg class="weight-line" viewBox="0 0 320 72" preserveAspectRatio="none"><path d="${path.d}" />${maPath.d ? `<path class="ma" d="${maPath.d}" />` : ""}</svg>`
             : `<p class="lede">One weigh-in is a selfie. Two is a trend.</p>`
         }
         <div class="amount-row" style="margin-top:12px">
@@ -884,6 +1208,16 @@ function verdict() {
         </div>
         <p class="tiny" id="wnote"></p>
         <div class="list" id="wlist" style="margin-top:10px"></div>
+      </div>
+      <div class="glass pad">
+        <header class="kicker">Trends</header>
+        ${heatTrend}
+        ${hist30.length ? `<p class="tiny">Heat, last ${hist30.length} settled day${hist30.length === 1 ? "" : "s"}.</p>` : `<p class="lede">No closed days yet. The trend needs graves to stand on.</p>`}
+        ${
+          weekly
+            ? `<div class="week-sum"><b>${weekly.avgKcal}</b> / ${weekly.avgT} kcal avg · <b>${weekly.avgProtein}g</b> protein · <b class="${weekly.avgDelta >= 0 ? "up" : "down"}">${weekly.avgDelta >= 0 ? "+" : ""}${weekly.avgDelta}</b> heat/day · last ${weekly.n}d</div>`
+            : ""
+        }
       </div>
       <div class="glass pad">
         <header class="kicker">Closed days</header>
@@ -932,7 +1266,18 @@ function verdict() {
 
   const wlist = box.querySelector("#wlist");
   state.weighIns.slice(0, 6).forEach((w) => {
-    wlist.append(el(`<div class="row"><div><strong>${w.kg} kg</strong><div class="meta">${escapeHtml(prettyDay(w.day))}</div></div></div>`));
+    const row = el(`
+      <div class="row">
+        <div><strong>${w.kg} kg</strong><div class="meta">${escapeHtml(prettyDay(w.day))}</div></div>
+        <button class="x" type="button" aria-label="Delete weigh-in">×</button>
+      </div>
+    `);
+    row.querySelector("button").onclick = () => {
+      deleteWeighIn(state, w.id);
+      persist();
+      render();
+    };
+    wlist.append(row);
   });
 
   box.querySelector("#close").onclick = () => {
@@ -944,6 +1289,7 @@ function verdict() {
     day.verdictShown = true;
     setDay(state, todayKey(), day);
     persist();
+    stamp = { headline: copy.headline, body: copy.body, delta: result.delta, xpGain: result.xpGain };
     tab = "verdict";
     render();
   };
@@ -953,6 +1299,15 @@ function verdict() {
     persist();
     render();
   };
+  const reopen = box.querySelector("#reopen");
+  if (reopen) {
+    reopen.onclick = () => {
+      if (!confirm("Reopen today? Heat, XP, and streak rewind to before the verdict.")) return;
+      reopenDay(state, today());
+      persist();
+      render();
+    };
+  }
   box.querySelector("#weigh").onclick = () => {
     const res = logWeighIn(state, box.querySelector("#wkg").value);
     if (!res.ok) {
@@ -1019,11 +1374,24 @@ function self() {
         </div>
         <button class="btn" id="savep">Save human</button>
         <p class="tiny" id="smsg">${escapeHtml(saveMsg)} Current math: ${t.kcal} kcal · ${t.protein}p · ${t.carbs}c · ${t.fat}f</p>
+        <p class="tiny">The tracking day ends at 3am — a 1am snack lands on yesterday, where it belongs.</p>
       </div>
       <div class="glass pad">
         <header class="kicker">Ranks</header>
         <p class="lede">XP is the climb. Heat is the weather. You are ${escapeHtml(mine.name)}.</p>
         <div class="rank-ladder">${ladder}</div>
+      </div>
+      <div class="glass pad">
+        <header class="kicker">Look</header>
+        <p class="lede">Same fire, different sky.</p>
+        <div class="chips" id="theme-chips"></div>
+      </div>
+      <div class="glass pad">
+        <header class="kicker">Food database</header>
+        <p class="lede">Packaged products are free forever. USDA basics work without a key, but a personal free key stops the throttling.</p>
+        <div class="field"><label>USDA FDC API key (optional)</label><input id="usda" placeholder="paste key from api.data.gov" value="${escapeHtml(getUsdaKey())}" /></div>
+        <button class="btn ghost" id="usda-save" type="button">Save key</button>
+        <p class="tiny" id="usda-msg"></p>
       </div>
       <div class="glass pad">
         <header class="kicker">Keep the fire</header>
@@ -1047,6 +1415,23 @@ function self() {
       </div>
     </section>
   `);
+  const themeChips = box.querySelector("#theme-chips");
+  Object.entries(THEMES).forEach(([id, meta]) => {
+    const b = el(`<button class="${(state.theme || "ember") === id ? "on" : ""}">${meta.label}</button>`);
+    b.onclick = () => {
+      state.theme = id;
+      persist();
+      render();
+    };
+    themeChips.append(b);
+  });
+  box.querySelector("#usda-save").onclick = () => {
+    const key = box.querySelector("#usda").value.trim();
+    setUsdaKey(key);
+    box.querySelector("#usda-msg").textContent = key
+      ? "Key stored on this device only. USDA results join the pantry."
+      : "Key cleared. Packaged products still work.";
+  };
   box.querySelector("#savep").onclick = () => {
     const kg = Number(box.querySelector("#kg").value) || p.kg;
     state.profile = {
@@ -1076,7 +1461,7 @@ function self() {
     const blob = new Blob([JSON.stringify(backupPayload(state), null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `ember-backup-${todayKey()}.json`;
+    a.download = `rite-backup-${todayKey()}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
     box.querySelector("#bakmsg").textContent = "Saved a file. Keep it off this browser — Drive, Files, a folder you actually own.";
@@ -1166,5 +1551,17 @@ function onboard() {
   };
   return box;
 }
+
+window.addEventListener("rite-update", () => {
+  document.querySelector(".rite-toast")?.remove();
+  const toast = el(`
+    <div class="rite-toast" role="status">
+      <span>Fresh build is in.</span>
+      <button class="btn" type="button">Reload</button>
+    </div>
+  `);
+  toast.querySelector("button").onclick = () => window.location.reload();
+  document.body.append(toast);
+});
 
 render();

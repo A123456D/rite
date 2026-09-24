@@ -86,6 +86,25 @@ export function searchLocal(q) {
     .map((x) => x.f);
 }
 
+const USDA_KEY_STORE = "rite.usdaKey";
+
+export function getUsdaKey() {
+  try {
+    return localStorage.getItem(USDA_KEY_STORE) || "";
+  } catch {
+    return "";
+  }
+}
+
+export function setUsdaKey(key) {
+  try {
+    if (key) localStorage.setItem(USDA_KEY_STORE, String(key).trim());
+    else localStorage.removeItem(USDA_KEY_STORE);
+  } catch {
+    /* ignore */
+  }
+}
+
 function nutrient(food, ids, names) {
   const list = food.foodNutrients || [];
   const hit = list.find((n) => {
@@ -100,7 +119,9 @@ export async function searchUsda(q) {
   const parsed = parseFoodQuery(q);
   const term = parsed.name.trim();
   if (term.length < 2) return [];
-  const key = import.meta.env.VITE_USDA_FDC_KEY || "DEMO_KEY";
+  // A personal key goes first; the public DEMO_KEY is best-effort — heavily
+  // rate-limited, but CORS-friendly and free.
+  const key = getUsdaKey() || import.meta.env.VITE_USDA_FDC_KEY || "DEMO_KEY";
   const url =
     `https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${encodeURIComponent(key)}` +
     `&query=${encodeURIComponent(term)}&pageSize=15&dataType=Foundation,SR Legacy,Survey (FNDDS)`;
@@ -125,8 +146,8 @@ export async function searchUsda(q) {
     .filter(Boolean);
 }
 
-export async function searchOpenFoods(q) {
-  const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=12`;
+async function searchOffLegacy(parsed) {
+  const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(parsed.name)}&search_simple=1&action=process&json=1&page_size=12`;
   const res = await fetch(url);
   if (!res.ok) throw new Error("lookup failed");
   const data = await res.json();
@@ -137,7 +158,7 @@ export async function searchOpenFoods(q) {
       if (!kcal || !p.product_name) return null;
       return {
         id: "off-" + (p.code || p.product_name),
-        name: p.product_name,
+        name: p.brands ? `${p.product_name} — ${String(p.brands).split(",")[0].trim()}` : p.product_name,
         kcal: Number(kcal),
         protein: Number(n.proteins_100g || 0),
         carbs: Number(n.carbohydrates_100g || 0),
@@ -147,6 +168,52 @@ export async function searchOpenFoods(q) {
       };
     })
     .filter(Boolean);
+}
+
+// The dedicated search host (search.openfoodfacts.org) runs the modern index
+// but sends no CORS header to arbitrary origins, so in a browser this only
+// works where CORS is relaxed; kept as the second chance, failures ignored.
+async function searchOffAlicious(parsed) {
+  const fields = "code,product_name,brands,nutriments";
+  const url = `https://search.openfoodfacts.org/search?q=${encodeURIComponent(parsed.name)}&page_size=12&fields=${fields}`;
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!res.ok) throw new Error("lookup failed");
+  const data = await res.json();
+  return (data.hits || [])
+    .map((p) => {
+      const n = p.nutriments || {};
+      const kcal = n["energy-kcal_100g"] || n["energy-kcal"] || 0;
+      if (!kcal || !p.product_name) return null;
+      const brand = Array.isArray(p.brands) ? p.brands[0] : p.brands;
+      return {
+        id: "off-" + (p.code || p.product_name),
+        name: brand ? `${p.product_name} — ${brand}` : p.product_name,
+        kcal: Number(kcal),
+        protein: Number(n.proteins_100g || 0),
+        carbs: Number(n.carbohydrates_100g || 0),
+        fat: Number(n.fat_100g || 0),
+        unit: "100g",
+        source: "OFF",
+      };
+    })
+    .filter(Boolean);
+}
+
+export async function searchOpenFoods(q) {
+  const parsed = parseFoodQuery(q);
+  if (parsed.name.trim().length < 2) return [];
+  try {
+    const hits = await searchOffLegacy(parsed);
+    if (hits.length) return hits;
+  } catch {
+    /* legacy endpoint is periodically down */
+  }
+  try {
+    return await searchOffAlicious(parsed);
+  } catch {
+    /* blocked by CORS in browsers today */
+  }
+  return [];
 }
 
 export async function searchAnywhere(q) {
@@ -166,14 +233,14 @@ export async function searchAnywhere(q) {
   if (cached) add(cached);
   else if (parsed.name.trim().length >= 2) {
     const remote = [];
-    await Promise.all([
-      searchUsda(q)
-        .then((r) => remote.push(...r))
-        .catch(() => {}),
-      searchOpenFoods(parsed.name)
-        .then((r) => remote.push(...r))
-        .catch(() => {}),
-    ]);
+    // Packaged products first (they carry per-100g labels), then USDA when a
+    // personal key exists.
+    await searchOpenFoods(parsed.name)
+      .then((r) => remote.push(...r))
+      .catch(() => {});
+    await searchUsda(q)
+      .then((r) => remote.push(...r))
+      .catch(() => {});
     add(remote);
     if (remote.length) cacheWrite(key, remote);
   }
@@ -193,5 +260,22 @@ export function scaleFood(food, amount) {
     carbs: round((food.carbs || 0) * mul),
     fat: round((food.fat || 0) * mul),
     foodId: food.id,
+    // Macros of the reference amount, so logged rows can be re-scaled later
+    // without needing the pantry entry around.
+    base: { kcal: food.kcal, protein: food.protein, carbs: food.carbs || 0, fat: food.fat || 0, unit: base },
+  };
+}
+
+export function rescaleItem(item, amount) {
+  if (!item.base) return null;
+  const mul = amount / item.base.unit;
+  const round = (n) => Math.round(n * 10) / 10;
+  return {
+    ...item,
+    amount,
+    kcal: Math.round(item.base.kcal * mul),
+    protein: round(item.base.protein * mul),
+    carbs: round(item.base.carbs * mul),
+    fat: round(item.base.fat * mul),
   };
 }

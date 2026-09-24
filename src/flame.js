@@ -37,6 +37,14 @@ export function createFlame(canvas) {
   const accent2 = cssVar("--ember-2", "#d34000");
   const hot = cssVar("--hot", "#ffb060");
   const plate = cssVar("--charcoal", "#161210");
+  const theme = document.documentElement.dataset.theme;
+  const hudMode = theme === "hud";
+  // Additive glow is invisible on light paper — light themes composite normally.
+  const lightMode = theme === "sketch" || theme === "aura";
+  const la = lightMode ? 1.7 : 1; // alpha boost: no additive glow on white paper
+  const t0 = performance.now();
+  const rgba = rgbaHex;
+  const hotColor = hot;
   const SPRITE_CORE = makeSprite([
     [0, rgbaHex(hot, 1)],
     [0.12, rgbaHex(accent, 0.9)],
@@ -130,22 +138,22 @@ export function createFlame(canvas) {
     }
   }
 
-  function draw() {
+  function draw(now) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.globalCompositeOperation = "source-over";
     ctx.fillStyle = plate;
     ctx.fillRect(0, 0, cssW, cssH);
     const h = Math.max(0.12, heat / 100);
     const { cx, cy } = origin();
-    ctx.globalCompositeOperation = "lighter";
+    // Additive glow is invisible-ish on light paper: channels clamp to white.
+    // Light themes composite normally so ink/watercolor colors stay true.
+    ctx.globalCompositeOperation = lightMode ? "source-over" : "lighter";
 
-    const haloR = 62 + h * 28;
-    ctx.globalAlpha = 0.55 + h * 0.25;
-    ctx.drawImage(SPRITE_EMBER, cx - haloR, cy - haloR, haloR * 2, haloR * 2);
-
-    const coreR = 26 + h * 16;
-    ctx.globalAlpha = 0.85;
-    ctx.drawImage(SPRITE_CORE, cx - coreR, cy - coreR, coreR * 2, coreR * 2);
+    if (hudMode) {
+      drawOrb(now, h, cx, cy);
+    } else {
+      drawEmber(h, cx, cy);
+    }
 
     for (let i = 0; i < MAX; i++) {
       const p = particles[i];
@@ -161,6 +169,101 @@ export function createFlame(canvas) {
     ctx.globalCompositeOperation = "source-over";
   }
 
+  function drawEmber(h, cx, cy) {
+    const haloR = 62 + h * 28;
+    ctx.globalAlpha = 0.55 + h * 0.25;
+    ctx.drawImage(SPRITE_EMBER, cx - haloR, cy - haloR, haloR * 2, haloR * 2);
+
+    const coreR = 26 + h * 16;
+    ctx.globalAlpha = 0.85;
+    ctx.drawImage(SPRITE_CORE, cx - coreR, cy - coreR, coreR * 2, coreR * 2);
+  }
+
+  // HUD plasma orb: layered radial gradients, a wobbling energy rim, and two
+  // rotating arcs. All colors come from the theme vars sampled at creation,
+  // and everything scales with heat — no raster involved.
+  function drawOrb(now, h, cx, cy) {
+    const t = ((now || performance.now()) - t0) / 1000;
+    const R = Math.min(cssW, cssH) * (0.24 + h * 0.15);
+    const oy = cy + cssH * 0.12;
+
+    let g = ctx.createRadialGradient(cx, oy, R * 0.2, cx, oy, R * 2.4);
+    g.addColorStop(0, rgba(accent, Math.min(1, (0.2 + h * 0.22) * la)));
+    g.addColorStop(0.5, rgba(accent2, 0.07));
+    g.addColorStop(1, rgba(accent2, 0));
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(cx, oy, R * 2.4, 0, Math.PI * 2);
+    ctx.fill();
+
+    g = ctx.createRadialGradient(cx, oy - R * 0.12, R * 0.05, cx, oy, R);
+    g.addColorStop(0, rgba(hotColor, Math.min(1, (0.7 + h * 0.3) * la)));
+    g.addColorStop(0.3, rgba(accent, Math.min(1, (0.55 + h * 0.25) * la)));
+    g.addColorStop(0.68, rgba(accent, Math.min(1, 0.3 * la)));
+    g.addColorStop(0.92, rgba(accent2, Math.min(1, 0.38 * la)));
+    g.addColorStop(1, rgba(accent2, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    orbPath(cx, oy, R, t, 0);
+    ctx.fill();
+
+    ctx.lineWidth = 1.6;
+    ctx.strokeStyle = rgba(hotColor, Math.min(1, 0.55 * la));
+    ctx.beginPath();
+    orbPath(cx, oy, R * 1.02, t, 1.7);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = rgba(accent, Math.min(1, 0.3 * la));
+    ctx.beginPath();
+    orbPath(cx, oy, R * 0.9, t * 1.4 + 2, -1.1);
+    ctx.stroke();
+
+    for (const [tilt, speed, span, alpha] of [
+      [-0.5, 0.35, 2.1, 0.6],
+      [0.9, -0.26, 1.5, 0.4],
+    ]) {
+      const a0 = t * speed + tilt;
+      g = ctx.createLinearGradient(cx - R, oy, cx + R, oy);
+      g.addColorStop(0, rgba(accent, 0));
+      g.addColorStop(0.5, rgba(hotColor, alpha));
+      g.addColorStop(1, rgba(accent, 0));
+      ctx.strokeStyle = g;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.ellipse(cx, oy, R * 1.16, R * 0.36, tilt, a0, a0 + span);
+      ctx.stroke();
+    }
+
+    g = ctx.createRadialGradient(cx, oy - R * 0.3, 0, cx, oy - R * 0.3, R * 0.55);
+    g.addColorStop(0, rgba(hotColor, Math.min(1, (0.55 + h * 0.4) * la)));
+    g.addColorStop(1, rgba(hotColor, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(cx, oy - R * 0.3, R * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Wobbling plasma silhouette: a circle modulated by three slow harmonics.
+  function orbPath(cx, cy, R, t, phase) {
+    for (let i = 0; i <= 72; i++) {
+      const th = (i / 72) * Math.PI * 2;
+      const wobble =
+        1 +
+        0.05 * Math.sin(3 * th + t * 1.25 + phase) +
+        0.035 * Math.sin(5 * th - t * 1.9 + phase * 2) +
+        0.022 * Math.sin(8 * th + t * 0.65);
+      const x = cx + Math.cos(th) * R * wobble;
+      const y = cy + Math.sin(th) * R * wobble;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  }
+
+  const reducedMotion =
+    typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
   function resize() {
     dpr = Math.min(2, window.devicePixelRatio || 1);
     cssW = Math.max(1, canvas.clientWidth);
@@ -168,22 +271,30 @@ export function createFlame(canvas) {
     canvas.width = Math.floor(cssW * dpr);
     canvas.height = Math.floor(cssH * dpr);
     warm();
+    if (reducedMotion) draw();
   }
 
   function tick() {
     step();
-    draw();
+    draw(performance.now());
     raf = requestAnimationFrame(tick);
   }
 
   const ro = new ResizeObserver(resize);
   ro.observe(canvas);
   resize();
-  tick();
+
+  if (reducedMotion) {
+    // One warm, still flame instead of a looping animation.
+    draw();
+  } else {
+    tick();
+  }
 
   return {
     setHeat(v) {
       heat = v;
+      if (reducedMotion) draw();
     },
     destroy() {
       cancelAnimationFrame(raf);

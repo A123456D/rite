@@ -1,0 +1,27 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='300' height='360' viewBox='0 0 300 360'>
+  <defs>
+    <linearGradient id='p' x1='0' y1='0' x2='0' y2='1'>
+      <stop offset='0' stop-color='#0c1722'/>
+      <stop offset='1' stop-color='#081019'/>
+    </linearGradient>
+    <pattern id='g' width='24' height='24' patternUnits='userSpaceOnUse'>
+      <path d='M24 0H0V24' fill='none' stroke='rgba(120,225,255,0.05)' stroke-width='1'/>
+    </pattern>
+  </defs>
+  <path d='M16 0H284L300 16V344L284 360H16L0 344V16Z' fill='url(#p)'/>
+  <rect x='24' y='24' width='252' height='312' fill='url(#g)'/>
+  <path d='M16 0H284L300 16V344L284 360H16L0 344V16Z' fill='none' stroke='rgba(120,225,255,0.5)' stroke-width='1.5'/>
+  <rect x='22' y='22' width='256' height='316' fill='none' stroke='rgba(120,225,255,0.13)' stroke-width='1'/>
+  <g stroke='#7fe9ff' stroke-width='2.5' fill='none' stroke-linecap='square'>
+    <path d='M2 30V16L16 2H30'/>
+    <path d='M298 330V344L284 358H270'/>
+    <path d='M270 2H284L298 16V30'/>
+    <path d='M30 358H16L2 344V330'/>
+  </g>
+  <g stroke='rgba(120,225,255,0.4)' stroke-width='4'>
+    <path d='M40 12l8 -8M52 12l8 -8M64 12l8 -8'/>
+  </g>
+  <g stroke='rgba(120,225,255,0.3)' stroke-width='4'>
+    <path d='M252 348l8 8M240 348l8 8M228 348l8 8'/>
+  </g>
+</svg>

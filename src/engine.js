@@ -1,3 +1,5 @@
+import { todayKey, dateKey } from "./store.js";
+
 export const RANKS = [
   { min: 0, name: "Cinder", title: "Barely a rumor" },
   { min: 80, name: "Spark", title: "Occasional honesty" },
@@ -54,7 +56,7 @@ export function logWeighIn(state, kg) {
   const prev = currentKg(state);
   state.weighIns.unshift({
     id: crypto.randomUUID(),
-    day: todayKeyNow(),
+    day: todayKey(),
     kg: n,
     at: Date.now(),
   });
@@ -69,13 +71,18 @@ export function logWeighIn(state, kg) {
   };
 }
 
+export function deleteWeighIn(state, id) {
+  state.weighIns = (state.weighIns || []).filter((w) => w.id !== id);
+  if (state.profile && state.weighIns.length) state.profile.kg = state.weighIns[0].kg;
+}
+
 export function heatCalendar(state, n = 21) {
   const map = new Map((state.history || []).map((h) => [h.day, h]));
+  const base = new Date(Date.now() - 3 * 3600000);
   const days = [];
-  const now = new Date();
   for (let i = n - 1; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const d = new Date(base.getFullYear(), base.getMonth(), base.getDate() - i);
+    const key = dateKey(d);
     days.push({
       key,
       entry: map.get(key) || null,
@@ -88,6 +95,21 @@ export function heatCalendar(state, n = 21) {
 export function weightPath(weighIns, w = 320, h = 72) {
   const pts = [...(weighIns || [])].slice(0, 12).reverse();
   if (pts.length < 2) return { d: "", pts: [] };
+  return pathFor(pts, w, h);
+}
+
+export function weightMovingAverage(weighIns, window = 5, w = 320, h = 72) {
+  const pts = [...(weighIns || [])].slice(0, 24).reverse();
+  if (pts.length < window) return { d: "", pts: [] };
+  const smoothed = pts.map((p, i) => {
+    const from = Math.max(0, i - window + 1);
+    const slice = pts.slice(from, i + 1);
+    return { ...p, kg: slice.reduce((a, q) => a + q.kg, 0) / slice.length };
+  });
+  return pathFor(smoothed, w, h);
+}
+
+function pathFor(pts, w, h) {
   const ys = pts.map((p) => p.kg);
   const min = Math.min(...ys) - 0.4;
   const max = Math.max(...ys) + 0.4;
@@ -124,8 +146,42 @@ export function calorieScore(eaten, target) {
   return -1.2;
 }
 
+// Single source of truth for day scoring. Both the live preview and the
+// settled verdict call this, so the promised swing is always the real swing.
+export function scoreDay(day, t, profile) {
+  const tot = dayTotals(day);
+  const trained = day.workouts.some((w) => w.kind !== "rest");
+  const cal = calorieScore(tot.kcal, t.kcal);
+  const proteinHit = tot.protein >= t.protein * 0.9;
+  const proteinRatio = t.protein ? tot.protein / t.protein : 0;
+
+  let delta;
+  if (tot.kcal === 0) {
+    // Nothing eaten: a fasted training day still counts. A ghost day burns.
+    delta = trained ? 8 : -12;
+  } else {
+    delta = cal * 10;
+    if (proteinHit) delta += 6;
+    else if (proteinRatio < 0.6) delta -= 5;
+    if (trained) delta += 11;
+    else if (profile.goal !== "recomp") delta -= 4;
+    if (day.confessed && cal < 0) delta += 3;
+  }
+  return {
+    delta: Math.round(delta),
+    cal,
+    proteinHit,
+    proteinRatio,
+    trained,
+    tot,
+    t,
+    over: tot.kcal - t.kcal,
+    underProtein: t.protein - tot.protein,
+  };
+}
+
 export function applyDecay(state) {
-  const today = todayKeyNow();
+  const today = todayKey();
   if (!state.lastActiveDay) {
     state.lastDecayDay = today;
     return { decayed: 0 };
@@ -143,11 +199,6 @@ export function applyDecay(state) {
   return { decayed };
 }
 
-function todayKeyNow() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 function daysBetween(from, to) {
   const a = new Date(from + "T12:00:00");
   const b = new Date(to + "T12:00:00");
@@ -155,70 +206,58 @@ function daysBetween(from, to) {
 }
 
 export function settleDay(state, day, profile) {
-  const t = targets(profile);
-  const tot = dayTotals(day);
-  const trained = day.workouts.some((w) => w.kind !== "rest");
-  const cal = calorieScore(tot.kcal, t.kcal);
-  const proteinHit = tot.protein >= t.protein * 0.9;
-  const proteinRatio = t.protein ? tot.protein / t.protein : 0;
-
-  let delta = 0;
-  delta += cal * 10;
-  if (proteinHit) delta += 6;
-  else if (proteinRatio < 0.6) delta -= 5;
-  if (trained) delta += 11;
-  else if (profile.goal !== "recomp") delta -= 4;
-  if (day.confessed && cal < 0) delta += 3;
-  if (tot.kcal === 0 && !trained) delta = -12;
-
-  const prev = state.heat;
-  state.heat = clamp(Math.round(state.heat + delta), 0, 100);
-  const xpGain = Math.max(0, Math.round(8 + delta * 1.4 + (trained ? 6 : 0)));
+  const s = scoreDay(day, targets(profile), profile);
+  const prev = {
+    heat: state.heat,
+    xp: state.xp,
+    streak: state.streak,
+    lastActiveDay: state.lastActiveDay,
+  };
+  state.heat = clamp(Math.round(state.heat + s.delta), 0, 100);
+  const xpGain = Math.max(0, Math.round(8 + s.delta * 1.4 + (s.trained ? 6 : 0)));
   state.xp += xpGain;
 
-  const today = todayKeyNow();
+  const today = todayKey();
   if (state.lastActiveDay) {
-    const gap = daysBetween(state.lastActiveDay, today);
-    state.streak = gap === 0 ? state.streak + 1 : 1;
+    // daysBetween counts middle days: 0 means settled today or yesterday,
+    // i.e. the streak is alive. Anything longer resets it.
+    state.streak = daysBetween(state.lastActiveDay, today) === 0 ? state.streak + 1 : 1;
   } else {
     state.streak = 1;
   }
   state.lastActiveDay = today;
   state.lastDecayDay = today;
 
-  const result = {
-    delta: state.heat - prev,
-    xpGain,
-    cal,
-    proteinHit,
-    trained,
-    tot,
-    t,
-    over: tot.kcal - t.kcal,
-    underProtein: t.protein - tot.protein,
-  };
+  const result = { ...s, delta: state.heat - prev.heat, xpGain, prev };
   state.history.unshift({ day: today, heat: state.heat, ...result, at: Date.now() });
   state.history = state.history.slice(0, 60);
   return result;
 }
 
+// Undo today's verdict: restores heat, XP, streak, and lastActiveDay from the
+// snapshot taken at settle time, so a mis-settle is never permanent.
+export function reopenDay(state, day) {
+  const entry = state.history[0];
+  if (!entry || entry.day !== todayKey() || !entry.prev) return { ok: false };
+  state.history.shift();
+  state.heat = clamp(entry.prev.heat, 0, 100);
+  state.xp = entry.prev.xp;
+  state.streak = entry.prev.streak;
+  state.lastActiveDay = entry.prev.lastActiveDay;
+  if (day) day.verdictShown = false;
+  return { ok: true };
+}
+
 export function liveDelta(day, profile, heat) {
   const t = targets(profile);
-  const tot = dayTotals(day);
-  const trained = day.workouts.some((w) => w.kind !== "rest");
-  let preview = 0;
-  preview += calorieScore(tot.kcal, t.kcal) * 10;
-  if (tot.protein >= t.protein * 0.9) preview += 6;
-  else if (t.protein && tot.protein / t.protein < 0.6) preview -= 5;
-  if (trained) preview += 11;
-  if (tot.kcal === 0) preview = trained ? 11 : 0;
+  const s = scoreDay(day, t, profile);
   return {
-    preview: Math.round(preview),
-    nextHeat: clamp(Math.round(heat + preview), 0, 100),
-    tot,
+    preview: s.delta,
+    nextHeat: clamp(Math.round(heat + s.delta), 0, 100),
+    tot: s.tot,
     t,
-    trained,
-    ratio: t.kcal ? tot.kcal / t.kcal : 0,
+    trained: s.trained,
+    ratio: t.kcal ? s.tot.kcal / t.kcal : 0,
   };
 }
 
@@ -229,8 +268,3 @@ function clamp(n, a, b) {
 export function clampHeat(n) {
   return clamp(Math.round(n), 0, 100);
 }
-
-function todayKeyNowExport() {
-  return todayKeyNow();
-}
-export { todayKeyNowExport as engineToday };

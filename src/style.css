@@ -1233,3 +1233,1008 @@ img {
     animation: none;
   }
 }
+
+/* ---------- Vesper theme: same fire, dusk sky. Tokens only — components
+   inherit, flame and gauges read the same custom properties. ---------- */
+[data-theme="vesper"] {
+  --void: #0c0a18;
+  --ink: #12101f;
+  --panel: #1c1933;
+  --charcoal: #171428;
+  --line: rgba(255, 255, 255, 0.09);
+  --ember: #a06bff;
+  --ember-2: #6e3fd6;
+  --hot: #e4d0ff;
+  --gold: #cfc4ec;
+  --mute: #9189ab;
+  --bright: #ffffff;
+  --ok: #7ef0c9;
+  --bad: #ff5d7a;
+  --on-accent: #14082b;
+  --input-bg: #0e0b1c;
+  --float: 0 12px 36px rgba(0, 0, 0, 0.65);
+  --glow-rgb: 160, 107, 255;
+  --brand-glow: 0 0 16px rgba(160, 107, 255, 0.7);
+  --gauge-from: #c9a8ff;
+  --gauge-to: #7a2cff;
+  --gauge-p-from: #c9a8ff;
+  --gauge-p-to: #7a2cff;
+}
+
+/* ---------- Components: barcode, plate actions, editing, trends, toast ---------- */
+button[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.barcode-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  align-items: center;
+}
+.barcode-row input {
+  flex: 1;
+  min-width: 0;
+}
+.barcode-row .btn {
+  width: auto;
+  padding: 10px 14px;
+  white-space: nowrap;
+}
+
+.label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.label-acts {
+  display: flex;
+  gap: 6px;
+}
+.repeat-y,
+.save-meal {
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--gold);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 5px 9px;
+  border-radius: 999px;
+}
+.repeat-y:active,
+.save-meal:active {
+  border-color: var(--ember);
+  color: var(--hot);
+}
+
+.row-acts {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex: none;
+}
+.row .edit {
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--gold);
+  border-radius: 999px;
+  width: 30px;
+  height: 30px;
+  font-weight: 700;
+}
+
+.edit-row {
+  align-items: flex-start;
+}
+.edit-fields {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.edit-fields .amount-row input {
+  width: 110px;
+}
+
+.heat-trend {
+  width: 100%;
+  height: 64px;
+  display: block;
+}
+.heat-trend rect.up {
+  fill: var(--ember);
+}
+.heat-trend rect.down {
+  fill: var(--ember-2);
+  opacity: 0.55;
+}
+.week-sum {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--gold);
+}
+.weight-line .ma {
+  fill: none;
+  stroke: var(--hot);
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+  opacity: 0.9;
+}
+
+.backup-nag {
+  color: var(--bad);
+  margin: 8px 2px 0;
+}
+
+.rite-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 86px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 10px 12px 10px 18px;
+  box-shadow: var(--float);
+  z-index: 60;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.rite-toast .btn {
+  width: auto;
+  padding: 8px 14px;
+}
+
+.scan-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 3, 2, 0.86);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 80;
+  padding: 20px;
+}
+.scan-box {
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.scan-video {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  max-height: 60vh;
+  object-fit: cover;
+  border-radius: var(--radius);
+  background: #000;
+}
+
+/* ==========================================================================
+   HUD theme — "instrumented honesty". RITE as a cyberpunk heads-up display:
+   console panels with chamfered corners and corner brackets, technical type,
+   and an accent ramp that shifts with the heat band. The plasma orb is drawn
+   on canvas (flame.js HUD mode); frames are geometric SVG, 9-sliced; the nav
+   dock is a pure-CSS pill. No raster assets.
+   ========================================================================== */
+[data-theme="hud"] {
+  --void: #04080d;
+  --ink: #060d14;
+  --panel: #0a141d;
+  --charcoal: #071018;
+  --line: rgba(96, 210, 255, 0.16);
+  --ember: #3fd8ff;
+  --ember-2: #1187c9;
+  --hot: #bdf1ff;
+  --gold: #c7e6f5;
+  --mute: #6f8ba0;
+  --bright: #ffffff;
+  --ok: #55f2c8;
+  --bad: #ff5d7a;
+  --on-accent: #032535;
+  --input-bg: #06101a;
+  --radius: 4px;
+  --radius-card: 6px;
+  --float: 0 14px 40px rgba(0, 0, 0, 0.6);
+  --glow-rgb: 63, 216, 255;
+  --brand-glow: 0 0 16px rgba(63, 216, 255, 0.75);
+  --gauge-from: #7fe9ff;
+  --gauge-to: #1187c9;
+  --gauge-p-from: #b39cff;
+  --gauge-p-to: #5f4bd8;
+  --display: "Chakra Petch", "DM Sans", sans-serif;
+  --hud-frame: rgba(63, 216, 255, 0.55);
+  --hud-tick: rgba(120, 225, 255, 0.45);
+}
+
+/* Heat-reactive ramp: the console shifts with the band. */
+[data-theme="hud"][data-heat-band="ash"] {
+  --ember: #2a7fa8;
+  --ember-2: #155a7e;
+  --hot: #9fc6d8;
+  --glow-rgb: 42, 127, 168;
+  --gauge-from: #7db6cf;
+  --gauge-to: #155a7e;
+  --hud-frame: rgba(42, 127, 168, 0.5);
+}
+[data-theme="hud"][data-heat-band="low"] {
+  --ember: #37b0e0;
+  --ember-2: #1477ab;
+  --glow-rgb: 55, 176, 224;
+  --hud-frame: rgba(55, 176, 224, 0.5);
+}
+[data-theme="hud"][data-heat-band="lit"] {
+  --ember: #5ee2ff;
+  --ember-2: #1b9ad4;
+  --glow-rgb: 94, 226, 255;
+  --gauge-from: #a5edff;
+  --gauge-to: #1b9ad4;
+  --hud-frame: rgba(94, 226, 255, 0.6);
+}
+[data-theme="hud"][data-heat-band="hot"] {
+  --ember: #eaf9ff;
+  --ember-2: #6adfff;
+  --hot: #ffffff;
+  --glow-rgb: 200, 245, 255;
+  --gauge-from: #ffffff;
+  --gauge-to: #55d7f2;
+  --hud-frame: rgba(200, 245, 255, 0.7);
+}
+[data-theme="hud"][data-heat-band="critical"] {
+  --ember: #ff5470;
+  --ember-2: #d61f4d;
+  --hot: #ffd9e1;
+  --bad: #ff2e55;
+  --glow-rgb: 255, 84, 112;
+  --gauge-from: #ff8ba0;
+  --gauge-to: #d61f4d;
+  --hud-frame: rgba(255, 84, 112, 0.6);
+}
+
+/* --- Nav: floating icon dock (all themes get icons; HUD gets the pill) --- */
+.nav button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.nav .nav-ico {
+  width: 21px;
+  height: 21px;
+  display: block;
+}
+.nav .nav-ico svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  display: block;
+}
+.nav .nav-label {
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+[data-theme="hud"] .nav {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  width: min(434px, calc(100% - 18px));
+  z-index: 40;
+  display: flex;
+  justify-content: space-around;
+  border: 1px solid transparent;
+  border-radius: 26px;
+  background:
+    linear-gradient(180deg, rgba(13, 27, 39, 0.94), rgba(6, 14, 21, 0.94)) padding-box,
+    linear-gradient(155deg, rgba(var(--glow-rgb), 0.8), rgba(var(--glow-rgb), 0.16) 38%, rgba(var(--glow-rgb), 0.6)) border-box;
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(var(--glow-rgb), 0.28),
+    inset 0 -1px 0 rgba(var(--glow-rgb), 0.12);
+  backdrop-filter: blur(10px);
+  padding: 8px 6px 9px;
+}
+[data-theme="hud"] .nav button {
+  color: var(--mute);
+  padding: 7px 2px 6px;
+  border-radius: 16px;
+  transition: color 0.2s ease;
+}
+[data-theme="hud"] .nav button.active {
+  color: var(--ember);
+  background: radial-gradient(ellipse at 50% 130%, rgba(var(--glow-rgb), 0.3), transparent 72%);
+}
+[data-theme="hud"] .nav button.active .nav-ico {
+  filter: drop-shadow(0 0 7px rgba(var(--glow-rgb), 0.85));
+}
+[data-theme="hud"] .nav button:active .nav-ico {
+  animation: dock-flare 0.35s ease;
+}
+@keyframes dock-flare {
+  40% { transform: scale(1.25); filter: drop-shadow(0 0 12px rgba(var(--glow-rgb), 1)); }
+}
+
+/* --- Framed console cards: crisp geometric SVG, 9-sliced ---------------- */
+[data-theme="hud"] .heat-card {
+  background: none;
+  box-shadow: none;
+  border: 0 solid transparent;
+  border-image-source: url("./hud/frame-hero.svg");
+  border-image-slice: 32 fill;
+  border-image-width: 44px;
+  border-image-repeat: stretch;
+  /* keep content inside the frame's fill area */
+  padding: 46px 48px 50px;
+}
+[data-theme="hud"] .heat-card .heat-stage {
+  background: transparent;
+  height: 172px;
+}
+[data-theme="hud"] .heat-card .heat-num {
+  padding-top: 2px;
+}
+[data-theme="hud"] .heat-card::before,
+[data-theme="hud"] .heat-card::after {
+  content: none;
+}
+[data-theme="hud"] .coach {
+  background: none;
+  box-shadow: none;
+  border: 0 solid transparent;
+  border-image-source: url("./hud/frame-wide.svg");
+  border-image-slice: 28 fill;
+  border-image-width: 26px;
+  border-image-repeat: stretch;
+  padding: 30px 40px 32px;
+}
+[data-theme="hud"] .coach::before,
+[data-theme="hud"] .coach::after {
+  content: none;
+}
+
+/* Plain cards: chamfered corners + corner brackets. */
+[data-theme="hud"] .glass:not(.heat-card):not(.coach) {
+  clip-path: polygon(
+    12px 0, 100% 0, 100% calc(100% - 12px),
+    calc(100% - 12px) 100%, 0 100%, 0 12px
+  );
+  border-color: var(--line);
+}
+[data-theme="hud"] .glass:not(.heat-card):not(.coach)::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 18px;
+  height: 18px;
+  border-top: 2px solid var(--hud-frame);
+  border-left: 2px solid var(--hud-frame);
+  pointer-events: none;
+}
+[data-theme="hud"] .glass:not(.heat-card):not(.coach)::before {
+  content: "";
+  position: absolute;
+  top: auto;
+  left: auto;
+  bottom: 0;
+  right: 0;
+  width: 18px;
+  height: 18px;
+  background: none;
+  border-bottom: 2px solid var(--hud-frame);
+  border-right: 2px solid var(--hud-frame);
+  transform: none;
+  animation: none;
+  filter: none;
+  pointer-events: none;
+}
+
+/* --- Plasma orb is drawn on the canvas by flame.js (HUD mode) ----------- */
+[data-theme="hud"] .heat-num {
+  z-index: 2;
+}
+[data-theme="hud"] .heat-num b {
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+[data-theme="hud"] .heat-num span {
+  font-family: var(--display);
+  letter-spacing: 0.3em;
+}
+
+/* One quiet scanline sweep per visit. */
+[data-theme="hud"] .heat-stage::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -30%;
+  height: 26%;
+  z-index: 1;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(var(--glow-rgb), 0.1) 45%,
+    rgba(var(--glow-rgb), 0.28) 50%,
+    rgba(var(--glow-rgb), 0.1) 55%,
+    transparent
+  );
+  mix-blend-mode: screen;
+  pointer-events: none;
+  animation: hud-sweep 3.4s ease-in-out 0.5s 1 both;
+}
+@keyframes hud-sweep {
+  to { top: 130%; }
+}
+
+/* --- Coach: waveform beside the name ------------------------------------ */
+.wave { display: none; }
+[data-theme="hud"] .coach-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+[data-theme="hud"] .wave {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 16px;
+}
+[data-theme="hud"] .wave i {
+  width: 2px;
+  height: 30%;
+  background: var(--ember);
+  opacity: 0.85;
+  animation: wave-bar 1.15s ease-in-out infinite;
+  transform-origin: bottom;
+}
+[data-theme="hud"] .wave i:nth-child(1) { animation-delay: 0s; }
+[data-theme="hud"] .wave i:nth-child(2) { animation-delay: 0.14s; height: 70%; }
+[data-theme="hud"] .wave i:nth-child(3) { animation-delay: 0.28s; }
+[data-theme="hud"] .wave i:nth-child(4) { animation-delay: 0.42s; height: 95%; }
+[data-theme="hud"] .wave i:nth-child(5) { animation-delay: 0.56s; }
+[data-theme="hud"] .wave i:nth-child(6) { animation-delay: 0.7s; height: 60%; }
+[data-theme="hud"] .wave i:nth-child(7) { animation-delay: 0.84s; }
+@keyframes wave-bar {
+  0%, 100% { transform: scaleY(0.4); }
+  50% { transform: scaleY(1); }
+}
+
+/* --- Gauge hardware ------------------------------------------------------ */
+[data-theme="hud"] .gauge {
+  position: relative;
+}
+[data-theme="hud"] .gauge::before {
+  content: "";
+  position: absolute;
+  inset: 6%;
+  border-radius: 50%;
+  background: repeating-conic-gradient(
+    from 0deg,
+    var(--hud-tick) 0deg 1deg,
+    transparent 1deg 11.25deg
+  );
+  -webkit-mask: radial-gradient(closest-side, transparent 82%, #000 83%);
+  mask: radial-gradient(closest-side, transparent 82%, #000 83%);
+  pointer-events: none;
+}
+[data-theme="hud"] .gauge svg {
+  animation: gauge-in 0.7s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+  transform-origin: 50% 50%;
+}
+@keyframes gauge-in {
+  from { opacity: 0; transform: scale(0.86) rotate(-8deg); }
+}
+[data-theme="hud"] .kicker {
+  font-family: var(--display);
+  letter-spacing: 0.24em;
+  color: var(--ember);
+}
+[data-theme="hud"] .brand .wordmark {
+  font-family: var(--display);
+  letter-spacing: 0.34em;
+}
+[data-theme="hud"] .list .row + .row {
+  border-top: 1px dotted rgba(var(--glow-rgb), 0.22);
+}
+
+/* --- Buttons: chamfered console keys ------------------------------------- */
+[data-theme="hud"] .btn {
+  clip-path: polygon(
+    10px 0, 100% 0, 100% calc(100% - 10px),
+    calc(100% - 10px) 100%, 0 100%, 0 10px
+  );
+}
+[data-theme="hud"] .btn:focus-visible,
+[data-theme="hud"] .nav button:focus-visible {
+  outline: 2px solid var(--ember);
+  outline-offset: 2px;
+}
+
+/* --- Verdict stamp -------------------------------------------------------- */
+.verdict-stamp {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+  background: rgba(3, 6, 10, 0.8);
+  backdrop-filter: blur(10px);
+}
+.stamp-card {
+  width: min(400px, 100%);
+  text-align: center;
+  padding: 36px 26px 28px;
+  background: var(--panel);
+  border: 1px solid var(--hud-frame, var(--line));
+  clip-path: polygon(
+    18px 0, 100% 0, 100% calc(100% - 18px),
+    calc(100% - 18px) 100%, 0 100%, 0 18px
+  );
+  animation: stamp-slam 0.4s cubic-bezier(0.2, 1.4, 0.3, 1) both;
+}
+@keyframes stamp-slam {
+  from { transform: scale(1.55); opacity: 0; }
+}
+.stamp-rule {
+  width: 64px;
+  height: 6px;
+  margin: 0 auto;
+  background: repeating-linear-gradient(
+    -55deg,
+    var(--hud-frame, var(--line)) 0 5px,
+    transparent 5px 10px
+  );
+}
+.stamp-headline {
+  font-family: var(--display, "Syne", sans-serif);
+  font-style: italic;
+  font-size: clamp(26px, 8vw, 34px);
+  letter-spacing: 0.01em;
+  margin: 14px 0 4px;
+  text-wrap: balance;
+}
+.stamp-delta {
+  font-family: var(--display, "Syne", sans-serif);
+  font-style: italic;
+  font-weight: 700;
+  font-size: 46px;
+  line-height: 1.1;
+}
+.stamp-delta span {
+  font-size: 15px;
+  font-style: normal;
+  letter-spacing: 0.2em;
+  opacity: 0.7;
+}
+.stamp-delta.up { color: var(--ok, var(--ember)); }
+.stamp-delta.down { color: var(--bad, var(--ember-2)); }
+.stamp-body {
+  margin: 10px 0 2px;
+  color: var(--gold, inherit);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="hud"] .heat-stage::before,
+  [data-theme="hud"] .gauge svg,
+  [data-theme="hud"] .wave i,
+  .stamp-card {
+    animation: none !important;
+  }
+}
+
+
+
+/* ==========================================================================
+   Arena v3 shared hardware: decor layer, swing pill, today chip, gauge
+   icons, training badge. Themed below.
+   ========================================================================== */
+.heat-decor {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.heat-card > *:not(.heat-decor) {
+  position: relative;
+  z-index: 1;
+}
+.swing-pill {
+  display: inline-block;
+  min-width: 34px;
+  text-align: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(var(--glow-rgb), 0.12);
+}
+.swing-pill.up { color: var(--ok); }
+.swing-pill.down { color: var(--bad); }
+.log-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.today-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mute);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 12px;
+}
+.today-chip svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+.g-ico {
+  display: inline-flex;
+  margin-bottom: 2px;
+}
+.g-ico svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: var(--ember);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.gauge:nth-child(2) .g-ico svg {
+  stroke: var(--gauge-p-from);
+}
+.train-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.train-label {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+.train-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: rgba(var(--glow-rgb), 0.13);
+  color: var(--ember);
+}
+.train-badge svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+.train-badge:not(.on) {
+  background: rgba(138, 129, 120, 0.14);
+  color: var(--mute);
+}
+
+/* ==========================================================================
+   NEBULA — electric violet dark. White italic numeral, violet plasma with
+   arcs (canvas), dot-matrix + diagonal decor.
+   ========================================================================== */
+[data-theme="nebula"] {
+  --void: #070512;
+  --ink: #0d0a1c;
+  --panel: #14101f;
+  --charcoal: #0e0a1a;
+  --line: rgba(160, 107, 255, 0.2);
+  --ember: #a06bff;
+  --ember-2: #6e3fd6;
+  --hot: #e4d0ff;
+  --gold: #cfc8ec;
+  --mute: #7d76a0;
+  --bright: #ffffff;
+  --ok: #7ef0c9;
+  --bad: #ff5d7a;
+  --on-accent: #170a33;
+  --input-bg: #0d0918;
+  --float: 0 14px 40px rgba(0, 0, 0, 0.6);
+  --glow-rgb: 160, 107, 255;
+  --brand-glow: 0 0 16px rgba(160, 107, 255, 0.75);
+  --gauge-from: #c9a8ff;
+  --gauge-to: #7a2cff;
+  --gauge-p-from: #6fb0ff;
+  --gauge-p-to: #2f6fe0;
+  --display: "Chakra Petch", "DM Sans", sans-serif;
+}
+[data-theme="nebula"] .heat-num b {
+  font-style: italic;
+  color: var(--bright);
+}
+[data-theme="nebula"] .heat-num span {
+  color: var(--ember);
+  font-style: italic;
+}
+[data-theme="nebula"] .heat-decor {
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg' viewBox%3D'0 0 66 36'%3E%3Cg fill%3D'rgba(160%2C107%2C255%2C0.4)'%3E%3Ccircle cx%3D'5' cy%3D'5' r%3D'1.8'%2F%3E%3Ccircle cx%3D'5' cy%3D'18' r%3D'1.8'%2F%3E%3Ccircle cx%3D'5' cy%3D'31' r%3D'1.8'%2F%3E%3Ccircle cx%3D'19' cy%3D'5' r%3D'1.8'%2F%3E%3Ccircle cx%3D'19' cy%3D'18' r%3D'1.8'%2F%3E%3Ccircle cx%3D'19' cy%3D'31' r%3D'1.8'%2F%3E%3Ccircle cx%3D'33' cy%3D'5' r%3D'1.8'%2F%3E%3Ccircle cx%3D'33' cy%3D'18' r%3D'1.8'%2F%3E%3Ccircle cx%3D'33' cy%3D'31' r%3D'1.8'%2F%3E%3Ccircle cx%3D'47' cy%3D'5' r%3D'1.8'%2F%3E%3Ccircle cx%3D'47' cy%3D'18' r%3D'1.8'%2F%3E%3Ccircle cx%3D'47' cy%3D'31' r%3D'1.8'%2F%3E%3Ccircle cx%3D'61' cy%3D'5' r%3D'1.8'%2F%3E%3Ccircle cx%3D'61' cy%3D'18' r%3D'1.8'%2F%3E%3Ccircle cx%3D'61' cy%3D'31' r%3D'1.8'%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg' viewBox%3D'0 0 66 36'%3E%3Cg fill%3D'rgba(160%2C107%2C255%2C0.25)'%3E%3Ccircle cx%3D'5' cy%3D'5' r%3D'1.8'%2F%3E%3Ccircle cx%3D'5' cy%3D'18' r%3D'1.8'%2F%3E%3Ccircle cx%3D'5' cy%3D'31' r%3D'1.8'%2F%3E%3Ccircle cx%3D'19' cy%3D'5' r%3D'1.8'%2F%3E%3Ccircle cx%3D'19' cy%3D'18' r%3D'1.8'%2F%3E%3Ccircle cx%3D'19' cy%3D'31' r%3D'1.8'%2F%3E%3Ccircle cx%3D'33' cy%3D'5' r%3D'1.8'%2F%3E%3Ccircle cx%3D'33' cy%3D'18' r%3D'1.8'%2F%3E%3Ccircle cx%3D'33' cy%3D'31' r%3D'1.8'%2F%3E%3Ccircle cx%3D'47' cy%3D'5' r%3D'1.8'%2F%3E%3Ccircle cx%3D'47' cy%3D'18' r%3D'1.8'%2F%3E%3Ccircle cx%3D'47' cy%3D'31' r%3D'1.8'%2F%3E%3Ccircle cx%3D'61' cy%3D'5' r%3D'1.8'%2F%3E%3Ccircle cx%3D'61' cy%3D'18' r%3D'1.8'%2F%3E%3Ccircle cx%3D'61' cy%3D'31' r%3D'1.8'%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E"),
+    repeating-linear-gradient(55deg, rgba(160, 107, 255, 0.16) 0 2px, transparent 2px 12px);
+  background-position: 24px 26px, right 26px top 96px, left -6px bottom 84px;
+  background-size: 66px 36px, 66px 36px, 120px 110px;
+  background-repeat: no-repeat, no-repeat, no-repeat;
+}
+[data-theme="nebula"] .coach {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+}
+[data-theme="nebula"] .kicker {
+  font-family: var(--display);
+  letter-spacing: 0.22em;
+  color: var(--ember);
+}
+[data-theme="nebula"] .heat-cap {
+  color: var(--gold);
+}
+
+/* ==========================================================================
+   AURA — soft violet light. White cards, navy italic numeral, glowing orb,
+   airy shadows.
+   ========================================================================== */
+[data-theme="aura"] {
+  --void: #f2f1fa;
+  --ink: #ebeaf6;
+  --panel: #ffffff;
+  --charcoal: #ffffff;
+  --line: rgba(35, 32, 74, 0.1);
+  --ember: #7c66f5;
+  --ember-2: #5a48d8;
+  --hot: #b9abff;
+  --gold: #23204a;
+  --mute: #8b88a6;
+  --bright: #23204a;
+  --ok: #1fa97e;
+  --bad: #e0457c;
+  --on-accent: #ffffff;
+  --input-bg: #f4f3fc;
+  --float: 0 10px 30px rgba(46, 38, 105, 0.1);
+  --glow-rgb: 124, 102, 245;
+  --brand-glow: 0 0 16px rgba(124, 102, 245, 0.5);
+  --gauge-from: #a89bff;
+  --gauge-to: #6a55e8;
+  --gauge-p-from: #8fb7ff;
+  --gauge-p-to: #4a7de0;
+}
+[data-theme="aura"] .glass {
+  box-shadow: var(--float);
+}
+[data-theme="aura"] .heat-num b {
+  font-style: italic;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #23204a;
+  text-shadow: 0 2px 18px rgba(124, 102, 245, 0.25);
+}
+[data-theme="aura"] .heat-num span {
+  color: var(--ember);
+  font-style: italic;
+}
+[data-theme="aura"] .heat-decor {
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg' viewBox%3D'0 0 66 36'%3E%3Cg fill%3D'rgba(124%2C102%2C245%2C0.35)'%3E%3Ccircle cx%3D'5' cy%3D'5' r%3D'1.8'%2F%3E%3Ccircle cx%3D'5' cy%3D'18' r%3D'1.8'%2F%3E%3Ccircle cx%3D'5' cy%3D'31' r%3D'1.8'%2F%3E%3Ccircle cx%3D'19' cy%3D'5' r%3D'1.8'%2F%3E%3Ccircle cx%3D'19' cy%3D'18' r%3D'1.8'%2F%3E%3Ccircle cx%3D'19' cy%3D'31' r%3D'1.8'%2F%3E%3Ccircle cx%3D'33' cy%3D'5' r%3D'1.8'%2F%3E%3Ccircle cx%3D'33' cy%3D'18' r%3D'1.8'%2F%3E%3Ccircle cx%3D'33' cy%3D'31' r%3D'1.8'%2F%3E%3Ccircle cx%3D'47' cy%3D'5' r%3D'1.8'%2F%3E%3Ccircle cx%3D'47' cy%3D'18' r%3D'1.8'%2F%3E%3Ccircle cx%3D'47' cy%3D'31' r%3D'1.8'%2F%3E%3Ccircle cx%3D'61' cy%3D'5' r%3D'1.8'%2F%3E%3Ccircle cx%3D'61' cy%3D'18' r%3D'1.8'%2F%3E%3Ccircle cx%3D'61' cy%3D'31' r%3D'1.8'%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg' viewBox%3D'0 0 66 36'%3E%3Cg fill%3D'rgba(124%2C102%2C245%2C0.22)'%3E%3Ccircle cx%3D'5' cy%3D'5' r%3D'1.8'%2F%3E%3Ccircle cx%3D'5' cy%3D'18' r%3D'1.8'%2F%3E%3Ccircle cx%3D'5' cy%3D'31' r%3D'1.8'%2F%3E%3Ccircle cx%3D'19' cy%3D'5' r%3D'1.8'%2F%3E%3Ccircle cx%3D'19' cy%3D'18' r%3D'1.8'%2F%3E%3Ccircle cx%3D'19' cy%3D'31' r%3D'1.8'%2F%3E%3Ccircle cx%3D'33' cy%3D'5' r%3D'1.8'%2F%3E%3Ccircle cx%3D'33' cy%3D'18' r%3D'1.8'%2F%3E%3Ccircle cx%3D'33' cy%3D'31' r%3D'1.8'%2F%3E%3Ccircle cx%3D'47' cy%3D'5' r%3D'1.8'%2F%3E%3Ccircle cx%3D'47' cy%3D'18' r%3D'1.8'%2F%3E%3Ccircle cx%3D'47' cy%3D'31' r%3D'1.8'%2F%3E%3Ccircle cx%3D'61' cy%3D'5' r%3D'1.8'%2F%3E%3Ccircle cx%3D'61' cy%3D'18' r%3D'1.8'%2F%3E%3Ccircle cx%3D'61' cy%3D'31' r%3D'1.8'%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E"),
+    radial-gradient(circle at 88% 78%, rgba(124, 102, 245, 0.12), transparent 55%),
+    radial-gradient(circle at 12% 90%, rgba(124, 102, 245, 0.08), transparent 50%);
+  background-position: 24px 26px, right 26px top 90px, 0 0, 0 0;
+  background-size: 66px 36px, 66px 36px, 100% 100%, 100% 100%;
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
+}
+[data-theme="aura"] .coach {
+  border-radius: var(--radius-card);
+}
+[data-theme="aura"] .heat-cap {
+  color: #6a678c;
+}
+[data-theme="aura"] .btn {
+  box-shadow: 0 6px 18px rgba(124, 102, 245, 0.3);
+}
+
+/* ==========================================================================
+   SKETCH — ink on paper. Warm paper, brush numeral (Permanent Marker),
+   typewriter coach (Space Mono), hand-drawn orbit scribbles + crosshairs,
+   marker accents.
+   ========================================================================== */
+[data-theme="sketch"] {
+  --void: #efe9df;
+  --ink: #e9e2d5;
+  --panel: #faf7f1;
+  --charcoal: #f7f3ea;
+  --line: rgba(23, 20, 15, 0.16);
+  --ember: #f04e23;
+  --ember-2: #c93a15;
+  --hot: #f4693f;
+  --gold: #33302a;
+  --mute: #8a8378;
+  --bright: #17140f;
+  --ok: #2f7d4f;
+  --bad: #c33715;
+  --on-accent: #fff7f2;
+  --input-bg: #f1ece1;
+  --float: 0 10px 26px rgba(60, 50, 35, 0.12);
+  --glow-rgb: 240, 78, 35;
+  --brand-glow: none;
+  --gauge-from: #f4764d;
+  --gauge-to: #e03a10;
+  --gauge-p-from: #55514a;
+  --gauge-p-to: #17140f;
+  --display: "Permanent Marker", "Syne", cursive;
+  --voice: "Space Mono", monospace;
+}
+[data-theme="sketch"] .glass {
+  box-shadow: var(--float);
+  border: 1px solid rgba(23, 20, 15, 0.2);
+}
+[data-theme="sketch"] .heat-card {
+  overflow: hidden;
+}
+[data-theme="sketch"] .heat-decor {
+  --sketch-cross: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg stroke='rgba(23,20,15,0.5)' stroke-width='1.4'%3E%3Cpath d='M12 3v18M3 12h18'/%3E%3C/g%3E%3C/svg%3E");
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg' viewBox%3D'0 0 300 240'%3E%3Cg fill%3D'none' stroke%3D'rgba(23%2C20%2C15%2C0.45)' stroke-width%3D'1'%3E%3Cpath d%3D'M40 120c10-52 70-88 138-84s122 44 116 92-70 82-138 80S30 172 40 120z'%2F%3E%3Cpath d%3D'M66 118c8-38 52-64 104-62s96 32 92 66-52 60-104 58-100-24-92-62z'%2F%3E%3Cellipse cx%3D'150' cy%3D'118' rx%3D'126' ry%3D'84' transform%3D'rotate(-8 150 118)'%2F%3E%3C%2Fg%3E%3Cg fill%3D'rgba(23%2C20%2C15%2C0.6)'%3E%3Ccircle cx%3D'36' cy%3D'96' r%3D'2.5'%2F%3E%3Ccircle cx%3D'268' cy%3D'50' r%3D'2'%2F%3E%3Ccircle cx%3D'283' cy%3D'152' r%3D'2.5'%2F%3E%3Ccircle cx%3D'62' cy%3D'196' r%3D'2'%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E"),
+    var(--sketch-cross), var(--sketch-cross), var(--sketch-cross), var(--sketch-cross);
+  background-position: right -20px center, 16px 18px, right 18px top 18px, 18px calc(100% - 18px), calc(100% - 20px) calc(100% - 20px);
+  background-size: 78% auto, 20px 20px, 20px 20px, 20px 20px, 20px 20px;
+  background-repeat: no-repeat;
+}
+[data-theme="sketch"] .heat-num b {
+  font-style: normal;
+  font-weight: 400;
+  letter-spacing: 0;
+  transform: rotate(-2deg);
+  color: #17140f;
+}
+[data-theme="sketch"] .heat-num span {
+  font-family: "Space Mono", monospace;
+  font-style: italic;
+  font-weight: 700;
+  color: var(--ember);
+  border-bottom: 3px solid var(--ember);
+  padding-bottom: 1px;
+}
+[data-theme="sketch"] .heat-cap {
+  color: #33302a;
+  text-align: left;
+  padding-left: 6px;
+}
+[data-theme="sketch"] .heat-cap::after {
+  content: "";
+  display: block;
+  width: 84px;
+  height: 4px;
+  margin-top: 6px;
+  background: var(--ember);
+  border-radius: 3px;
+  transform: rotate(-1deg);
+}
+[data-theme="sketch"] .coach {
+  border-left: 4px solid var(--ember);
+  border-radius: 14px;
+}
+[data-theme="sketch"] .who {
+  font-family: "Space Mono", monospace;
+  letter-spacing: 0.14em;
+  color: var(--ember);
+}
+[data-theme="sketch"] .coach > p {
+  font-family: "Space Mono", monospace;
+  font-size: 15px;
+  line-height: 1.5;
+}
+[data-theme="sketch"] .rank-track {
+  height: 3px;
+  background: rgba(23, 20, 15, 0.25);
+}
+[data-theme="sketch"] .rank-track i {
+  background: var(--ember);
+  box-shadow: 0 0 0 3px rgba(240, 78, 35, 0.18);
+}
+[data-theme="sketch"] .rank-name b,
+[data-theme="sketch"] .swing-line {
+  font-family: "Space Mono", monospace;
+}
+[data-theme="sketch"] .today-chip {
+  font-family: "Space Mono", monospace;
+}
+[data-theme="sketch"] .kicker {
+  font-family: "Space Mono", monospace;
+  letter-spacing: 0.16em;
+  color: var(--ember);
+}
+[data-theme="sketch"] .nav .nav-label {
+  font-family: "Space Mono", monospace;
+}
+[data-theme="sketch"] .nav button.active .nav-label {
+  color: var(--ember);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 2px;
+}
+[data-theme="sketch"] .wave {
+  display: none;
+}
+[data-theme="sketch"] .coach-head::after {
+  content: "";
+  flex: 1;
+  height: 34px;
+  margin-left: 12px;
+  background:
+    radial-gradient(circle 16px at 78% 55%, rgba(240, 78, 35, 0.2), transparent 70%),
+    repeating-linear-gradient(90deg, rgba(23, 20, 15, 0.7) 0 1.5px, transparent 1.5px 6px);
+  -webkit-mask: linear-gradient(180deg, transparent 8%, #000 30% 70%, transparent 92%);
+  mask: linear-gradient(180deg, transparent 8%, #000 30% 70%, transparent 92%);
+  align-self: center;
+}
+
+/* Light themes: soften meters and badges */
+[data-theme="sketch"] .meter {
+  background: rgba(23, 20, 15, 0.1);
+}
+[data-theme="aura"] .meter {
+  background: rgba(35, 32, 74, 0.1);
+}
+[data-theme="sketch"] .train-badge:not(.on) {
+  background: rgba(23, 20, 15, 0.08);
+}
+[data-theme="aura"] .train-badge:not(.on) {
+  background: rgba(35, 32, 74, 0.08);
+}
+
+/* Light themes: coach copy must be ink-on-paper, not dark-theme tints */
+[data-theme="aura"] .coach > p,
+[data-theme="sketch"] .coach.tone > p,
+[data-theme="aura"] .coach.tone > p {
+  color: #23204a;
+}
+[data-theme="sketch"] .coach > p,
+[data-theme="sketch"] .coach.tone > p {
+  color: #17140f;
+}
+[data-theme="aura"] .who,
+[data-theme="sketch"] .who {
+  color: var(--ember);
+  opacity: 1;
+}
+[data-theme="sketch"] .backup-nag,
+[data-theme="aura"] .backup-nag {
+  color: #b3261e;
+}
+[data-theme="aura"] .heat-cap {
+  color: #55516e;
+}

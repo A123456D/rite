@@ -2,6 +2,10 @@ const KEY = "ember.v1";
 const SHADOW_KEY = "ember.v1.bak";
 const BACKUP_KIND = "ember.backup.v1";
 
+// The tracking day ends at 3am: logs between midnight and 3am belong to the
+// previous day, so late dinners don't break streaks or split a day in half.
+export const DAY_CUT_HOURS = 3;
+
 const defaultState = () => ({
   profile: null,
   heat: 52,
@@ -15,6 +19,7 @@ const defaultState = () => ({
   recents: [],
   favorites: [],
   plans: {},
+  meals: [],
   lastBackupAt: null,
   theme: "ember",
   createdAt: Date.now(),
@@ -36,9 +41,10 @@ export function load() {
   }
 }
 
-function migrate(state) {
+export function migrate(state) {
   state.plans = state.plans || {};
-  state.theme = "ember";
+  state.meals = state.meals || [];
+  state.theme = ["ember", "vesper", "hud", "nebula", "aura", "sketch"].includes(state.theme) ? state.theme : "ember";
   for (const day of Object.values(state.days || {})) {
     for (const f of day.foods || []) {
       if (f.slot === "late") f.slot = "snacks";
@@ -107,6 +113,15 @@ export function save(state) {
 export function wipeLocal() {
   localStorage.removeItem(KEY);
   localStorage.removeItem(SHADOW_KEY);
+  localStorage.removeItem("ember.foodcache.v1");
+}
+
+export function saveMeal(state, meal) {
+  state.meals = [meal, ...(state.meals || [])].slice(0, 12);
+}
+
+export function removeMeal(state, id) {
+  state.meals = (state.meals || []).filter((m) => m.id !== id);
 }
 
 export function backupPayload(state) {
@@ -133,17 +148,20 @@ export async function requestDurableStorage() {
   }
 }
 
-export function todayKey(d = new Date()) {
+export function dateKey(d) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
 
+export function todayKey(d) {
+  if (d) return dateKey(d);
+  return dateKey(new Date(Date.now() - DAY_CUT_HOURS * 3600000));
+}
+
 export function yesterdayKey() {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return todayKey(d);
+  return dateKey(new Date(Date.now() - (DAY_CUT_HOURS + 24) * 3600000));
 }
 
 export function emptyDay() {
