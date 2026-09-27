@@ -61,7 +61,7 @@ export function createFlame(canvas) {
     [1, rgbaHex(accent2, 0)],
   ]);
   const ctx = canvas.getContext("2d", { alpha: true, desynchronized: true });
-  const MAX = 120;
+  const MAX = 140;
   const particles = Array.from({ length: MAX }, () => ({
     live: false,
     kind: 0,
@@ -97,6 +97,13 @@ export function createFlame(canvas) {
       p.vy = -0.05 - Math.random() * 0.14 * h;
       p.r = 22 + Math.random() * (16 + h * 18);
       p.decay = 0.007 + Math.random() * 0.006;
+    } else if (Math.random() < 0.12) {
+      // sparks: small, bright, quick
+      p.kind = 2;
+      p.vx = gauss() * (0.3 + h * 0.3);
+      p.vy = -(0.7 + Math.random() * (1.2 + h * 1.6));
+      p.r = 1.6 + Math.random() * 2.2;
+      p.decay = 0.016 + Math.random() * 0.016;
     } else {
       p.vx = gauss() * (0.22 + h * 0.2);
       p.vy = -(0.25 + Math.random() * (0.7 + h * 1.1));
@@ -170,11 +177,11 @@ export function createFlame(canvas) {
   }
 
   function drawEmber(h, cx, cy) {
-    const haloR = 62 + h * 28;
-    ctx.globalAlpha = 0.55 + h * 0.25;
+    const haloR = 86 + h * 36;
+    ctx.globalAlpha = 0.6 + h * 0.25;
     ctx.drawImage(SPRITE_EMBER, cx - haloR, cy - haloR, haloR * 2, haloR * 2);
 
-    const coreR = 26 + h * 16;
+    const coreR = 34 + h * 20;
     ctx.globalAlpha = 0.85;
     ctx.drawImage(SPRITE_CORE, cx - coreR, cy - coreR, coreR * 2, coreR * 2);
   }
@@ -184,10 +191,20 @@ export function createFlame(canvas) {
   // and everything scales with heat — no raster involved.
   function drawOrb(now, h, cx, cy) {
     const t = ((now || performance.now()) - t0) / 1000;
-    const R = Math.min(cssW, cssH) * (0.24 + h * 0.15);
-    const oy = cy + cssH * 0.12;
+    const R = Math.min(cssW, cssH) * (0.3 + h * 0.17);
+    const oy = cy + cssH * 0.1;
 
-    let g = ctx.createRadialGradient(cx, oy, R * 0.2, cx, oy, R * 2.4);
+    // ground glow: the orb lights whatever it floats over
+    let g = ctx.createRadialGradient(cx, oy + R * 1.3, 0, cx, oy + R * 1.3, R * 1.6);
+    g.addColorStop(0, rgba(accent, (0.12 + h * 0.16) * (lightMode ? 0.7 : 1)));
+    g.addColorStop(1, rgba(accent, 0));
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(cx, oy + R * 1.3, R * 1.7, R * 0.7, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    g = ctx.createRadialGradient(cx, oy, R * 0.2, cx, oy, R * 2.4);
     g.addColorStop(0, rgba(accent, Math.min(1, (0.2 + h * 0.22) * la)));
     g.addColorStop(0.5, rgba(accent2, 0.07));
     g.addColorStop(1, rgba(accent2, 0));

@@ -41,7 +41,7 @@ import { lineForLive, verdictCopy, heatCaption, morningFrom } from "./coach.js";
 import { searchLocal, scaleFood, rescaleItem, searchAnywhere, FOODS, getUsdaKey, setUsdaKey } from "./foods.js";
 import { SLOTS, defaultSlot, slotName, normalizeSlot, clockTime } from "./meals.js";
 import { barcodeSupported, lookupBarcode, scanBarcode } from "./barcode.js";
-import { createFlame } from "./flame.js";
+import { createHeatCore } from "./core3d.js";
 import { rankMark } from "./ranks.js";
 import { APP_NAME, THEMES, heatBand, applyTheme } from "./themes.js";
 import { registerPwa, canInstall, promptInstall, isStandalone } from "./pwa.js";
@@ -51,7 +51,7 @@ if (import.meta.env.PROD) registerPwa();
 const root = document.getElementById("app");
 let state = load();
 let tab = "arena";
-let flame = null;
+let core3d = null;
 let foodQuery = "";
 let foodHits = searchLocal("");
 let selectedFood = null;
@@ -77,6 +77,8 @@ const NAV_ICONS = {
   bolt: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L5 13.5h5L10.5 22 19 10h-5.5z"/></svg>`,
   muscle: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 3.5a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2 2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h2a2 2 0 0 1 2 2 2 2 0 0 1 2-2h5a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2 2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2" transform="rotate(45 12 12)"/><path d="M9 15l6-6"/></svg>`,
   calendar: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg>`,
+  grain: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21V8"/><path d="M12 12c0-2.5 1.8-4.2 4.5-4.5-.3 2.7-2 4.5-4.5 4.5z"/><path d="M12 12c0-2.5-1.8-4.2-4.5-4.5.3 2.7 2 4.5 4.5 4.5z"/><path d="M12 17c0-2.5 1.8-4.2 4.5-4.5-.3 2.7-2 4.5-4.5 4.5z"/><path d="M12 17c0-2.5-1.8-4.2-4.5-4.5.3 2.7 2 4.5 4.5 4.5z"/></svg>`,
+  drop: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5c3.2 4.2 5.5 7 5.5 9.8a5.5 5.5 0 0 1-11 0c0-2.8 2.3-5.6 5.5-9.8z"/></svg>`,
 };
 
 applyTheme(state.theme);
@@ -187,61 +189,14 @@ function heatStrip(liveHeat) {
   `;
 }
 
-function segs(heat) {
-  const n = 5;
-  const step = 100 / n;
-  return Array.from({ length: n }, (_, i) => {
-    const fill = Math.max(0, Math.min(1, (heat - i * step) / step));
-    return `<i style="--f:${fill}"></i>`;
-  }).join("");
-}
-
-function gauge(pct, title, big, sub, glow, icon) {
-  const r = 46;
-  const c = 2 * Math.PI * r;
-  const p = Math.max(0, Math.min(1.08, pct));
-  const dash = p * c;
-  const id = "g" + title.replace(/\W/g, "");
-  const show = p > 0.02;
+function dataRow(label, val, target, pct, over = false) {
   return `
-    <div class="gauge ${glow ? "lit" : ""}" role="img" aria-label="${title}: ${sub} (${big})">
-      <svg viewBox="0 0 120 120" aria-hidden="true">
-        <defs>
-          <linearGradient id="${id}grad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stop-color="${title === "Protein" ? "var(--gauge-p-from)" : "var(--gauge-from)"}"/>
-            <stop offset="100%" stop-color="${title === "Protein" ? "var(--gauge-p-to)" : "var(--gauge-to)"}"/>
-          </linearGradient>
-          ${
-            show
-              ? `<filter id="${id}glow" x="-40%" y="-40%" width="180%" height="180%">
-            <feGaussianBlur stdDeviation="3.5" result="b"/>
-            <feMerge>
-              <feMergeNode in="b"/>
-              <feMergeNode in="SourceGraphic"/>
-            </feMerge>
-          </filter>`
-              : ""
-          }
-        </defs>
-        <circle class="g-track" cx="60" cy="60" r="${r}"/>
-        <circle class="g-rim" cx="60" cy="60" r="${r + 4}"/>
-        ${
-          show
-            ? `<circle class="g-bloom" cx="60" cy="60" r="${r}" stroke="url(#${id}grad)"
-          stroke-dasharray="${dash.toFixed(2)} ${c.toFixed(2)}"
-          transform="rotate(-90 60 60)" filter="url(#${id}glow)"/>
-        <circle class="g-arc" cx="60" cy="60" r="${r}" stroke="url(#${id}grad)"
-          stroke-dasharray="${dash.toFixed(2)} ${c.toFixed(2)}"
-          transform="rotate(-90 60 60)"/>`
-            : ""
-        }
-      </svg>
-      <div class="g-copy">
-        ${icon ? `<span class="g-ico" aria-hidden="true">${icon}</span>` : ""}
-        <small>${title}</small>
-        <b>${big}</b>
-        <em>${sub}</em>
+    <div class="data-row ${over ? "over" : ""}">
+      <div class="dr-head">
+        <span>${label}</span>
+        <b>${val}<em> / ${target}</em></b>
       </div>
+      <div class="dr-meter"><i style="width:${Math.min(100, pct * 100).toFixed(1)}%"></i></div>
     </div>
   `;
 }
@@ -311,9 +266,9 @@ function commitFood(item, template, usedAmount) {
 function render() {
   applyTheme(state.theme);
   document.documentElement.dataset.heatBand = heatBand(state.heat);
-  if (flame) {
-    flame.destroy();
-    flame = null;
+  if (core3d) {
+    core3d.destroy();
+    core3d = null;
   }
   root.innerHTML = "";
   if (!state.profile) {
@@ -334,15 +289,20 @@ function render() {
     stage.append(verdictStamp());
   }
 
-  const canvas = stage.querySelector(".burst canvas");
-  if (canvas) {
+  // The 3D heat core mounts lazily (three.js is an async chunk); if the user
+  // re-rendered before it loads, the stale instance discards itself.
+  const coreCanvas = stage.querySelector(".core3d");
+  if (coreCanvas) {
     const snap = snapshot();
-    flame = createFlame(canvas);
-    flame.setHeat(snap.heat);
+    createHeatCore(coreCanvas, snap.heat).then((inst) => {
+      if (!inst) return;
+      if (!coreCanvas.isConnected) inst.destroy();
+      else core3d = inst;
+    });
   }
 
   // Tick the heat number from its previous value; cheap drama, honest numbers.
-  const heatEl = stage.querySelector(".heat-num b");
+  const heatEl = stage.querySelector(".heat-figure b");
   if (heatEl) {
     const target = Number(heatEl.textContent) || 0;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -449,63 +409,50 @@ function arena() {
   const tot = live.tot;
   const swing = locked ? lockedDelta : live.preview;
   const backupAgeDays = state.lastBackupAt ? Math.floor((Date.now() - state.lastBackupAt) / 86400000) : null;
+  const today = new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
   const box = el(`
-    <section class="screen">
-      <div class="glass heat-card" style="--h:${(heat / 100).toFixed(3)}">
-        <div class="heat-decor" aria-hidden="true"></div>
-        <div class="heat-stage">
-          <div class="burst">
-            <canvas></canvas>
-          </div>
-          <div class="heat-num"><b>${heat}</b><span>HEAT</span></div>
+    <section class="screen arena">
+      <section class="sect hero-heat">
+        <p class="micro"><i class="dot" aria-hidden="true"></i>Heat · ${heatBand(heat)}</p>
+        <div class="heat-core">
+          <canvas class="core3d" aria-hidden="true"></canvas>
+          <div class="heat-figure"><b>${heat}</b></div>
         </div>
+        <div class="heat-line" role="img" aria-label="heat ${heat} of 100"><i style="width:${Math.round(heat)}%"></i></div>
+        <p class="swing-line">${locked ? "Locked" : "Live swing"} · <b class="swing-pill ${swing >= 0 ? "up" : "down"}">${swing >= 0 ? "+" : ""}${swing}</b></p>
         <p class="heat-cap">${escapeHtml(heatCaption(heat))}</p>
-        <div class="seg-bar">${segs(heat)}</div>
-      </div>
-      <div class="coach ${coach.tone}" aria-live="polite">
-        <div class="coach-head">
-          <div class="who">${escapeHtml(coach.who)}</div>
-          <span class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
-        </div>
-        <p>${escapeHtml(coach.text)}</p>
-      </div>
-      <div class="rank-line">
-        <span class="rank-name">Rank · ${rankMark(r.name, 28)} <b>${escapeHtml(r.name)}</b></span>
-        <span class="swing-line">${locked ? "Locked" : "Live"} swing · <b class="swing-pill ${swing >= 0 ? "up" : "down"}">${swing >= 0 ? "+" : ""}${swing}</b></span>
-      </div>
-      <div class="tiny rank-sub">${escapeHtml(r.title)}${r.next ? ` · next ${escapeHtml(r.next)}` : ""}</div>
-      <div class="rank-track fat"><i style="width:${Math.round(r.progress * 100)}%"></i></div>
+      </section>
       ${
         backupAgeDays === null || backupAgeDays >= 14
-          ? `<p class="tiny backup-nag">${backupAgeDays === null ? "No backup yet. All of this burns with one browser reset — Self → Download backup." : `Last backup ${backupAgeDays} days ago. The fire lives in one browser. Copy it out.`}</p>`
+          ? `<p class="backup-nag">${backupAgeDays === null ? "No backup yet. All of this burns with one browser reset — Self → Download backup." : `Last backup ${backupAgeDays} days ago. The fire lives in one browser. Copy it out.`}</p>`
           : ""
       }
-      <div class="glass log-card">
-        <header class="log-head">
-          <span>Daily log</span>
-          <span class="today-chip">${NAV_ICONS.calendar} Today</span>
-        </header>
-        <div class="gauges">
-          ${gauge(t.kcal ? tot.kcal / t.kcal : 0, "Energy", `${t.kcal} kcal`, `${Math.round(tot.kcal)} / ${t.kcal}`, tot.kcal > 0, NAV_ICONS.bolt)}
-          ${gauge(t.protein ? tot.protein / t.protein : 0, "Protein", `${t.protein} g`, `${Math.round(tot.protein)} / ${t.protein}`, tot.protein > 0, NAV_ICONS.muscle)}
-        </div>
-        <div class="mini-rings">
-          <div class="ring-row">
-            <header><span>Carbs</span><strong>${Math.round(tot.carbs)} / ${t.carbs} g</strong></header>
-            <div class="meter ${meterClass(tot.carbs, t.carbs)}"><i style="width:${Math.min(140, (tot.carbs / Math.max(t.carbs, 1)) * 100)}%"></i></div>
+      <section class="sect coach ${coach.tone}" aria-live="polite">
+        <p class="micro">${escapeHtml(coach.who)}</p>
+        <p class="coach-line">${escapeHtml(coach.text)}</p>
+      </section>
+      <section class="sect">
+        <p class="micro">Today · ${today}</p>
+        ${dataRow("Energy", Math.round(tot.kcal).toLocaleString(), `${t.kcal}`, t.kcal ? tot.kcal / t.kcal : 0)}
+        ${dataRow("Protein", `${Math.round(tot.protein)}`, `${t.protein} g`, t.protein ? tot.protein / t.protein : 0)}
+        ${dataRow("Carbs", `${Math.round(tot.carbs)}`, `${t.carbs} g`, t.carbs ? tot.carbs / t.carbs : 0, meterClass(tot.carbs, t.carbs) === "over")}
+        ${dataRow("Fat", `${Math.round(tot.fat)}`, `${t.fat} g`, t.fat ? tot.fat / t.fat : 0, meterClass(tot.fat, t.fat) === "over")}
+        <div class="data-row train ${live.trained ? "good" : ""}">
+          <div class="dr-head">
+            <span>Training</span>
+            <b class="train-word">${live.trained ? "Stoked" : "Silent"}</b>
           </div>
-          <div class="ring-row">
-            <header><span>Fat</span><strong>${Math.round(tot.fat)} / ${t.fat} g</strong></header>
-            <div class="meter ${meterClass(tot.fat, t.fat)}"><i style="width:${Math.min(140, (tot.fat / Math.max(t.fat, 1)) * 100)}%"></i></div>
-          </div>
+          <div class="dr-meter"><i style="width:${live.trained ? 100 : 5}%"></i></div>
         </div>
-        <div class="train-row">
-          <span class="train-label">Training</span>
-          <span class="train-badge ${live.trained ? "on" : ""}">${NAV_ICONS.train}${live.trained ? "Stoked" : "Silent"}</span>
-          <div class="meter ${live.trained ? "good" : ""}"><i style="width:${live.trained ? 100 : 6}%"></i></div>
+      </section>
+      <section class="sect rank-sect">
+        <div class="rank-line">
+          <span class="rank-name">Rank · ${rankMark(r.name, 22)} <b>${escapeHtml(r.name)}</b></span>
+          <span class="tiny">${r.next ? `Next · ${escapeHtml(r.next)}` : "Top rank"}</span>
         </div>
-        ${timeLogHtml(snap.day.foods)}
-      </div>
+        <p class="tiny rank-sub">${escapeHtml(r.title)} · ${state.xp} XP</p>
+        <div class="rank-track fat"><i style="width:${Math.round(r.progress * 100)}%"></i></div>
+      </section>
       ${heatStrip(heat)}
     </section>
   `);
@@ -554,7 +501,7 @@ function fuel() {
   const favs = state.favorites || [];
   const meals = state.meals || [];
   const box = el(`
-    <section class="screen">
+    <section class="screen fuel">
       <div class="glass pad fuel-hero">
         <header class="kicker">Fuel</header>
         <div class="panel-num">${Math.round(live.tot.kcal)}<span> / ${live.t.kcal} kcal</span></div>
@@ -570,6 +517,7 @@ function fuel() {
         <div class="chips" id="slots"></div>
         <div class="week-strip ${fuelMode === "plan" ? "" : "hidden"}" id="week"></div>
       </div>
+      <div class="fuel-grid">
       <div class="glass pad">
         <header class="kicker">Pantry · ${FOODS.length} on device</header>
         <p class="tiny">Type a food. Local hits first, then packaged products + USDA. Results cache for two weeks.</p>
@@ -610,6 +558,7 @@ function fuel() {
       <div class="glass pad">
         <header class="kicker" id="diary-kicker">${fuelMode === "plan" ? "Meal plan" : "Today's plate"}</header>
         <div class="list" id="plate"></div>
+      </div>
       </div>
     </section>
   `);
@@ -1069,7 +1018,7 @@ function train() {
   const snap = snapshot();
   const locked = snap.locked;
   const box = el(`
-    <section class="screen">
+    <section class="screen train">
       <div class="glass pad">
         <header class="kicker">Train</header>
         <div class="panel-num">${snap.heat}<span> HEAT</span></div>
@@ -1184,7 +1133,7 @@ function verdict() {
   }
 
   const box = el(`
-    <section class="screen">
+    <section class="screen verdict">
       <div class="glass pad" id="card"></div>
       <div class="actions">
         <button class="btn" id="close">${locked ? "Today is locked" : "Close today"}</button>
@@ -1340,7 +1289,7 @@ function self() {
       </div>`
   ).join("");
   const box = el(`
-    <section class="screen">
+    <section class="screen self">
       <div class="glass pad">
         <header class="kicker">Self</header>
         <p class="heat-cap">Edit the meatbag. Heat, rank, and history stay.</p>
@@ -1416,8 +1365,18 @@ function self() {
     </section>
   `);
   const themeChips = box.querySelector("#theme-chips");
+  const ACCENTS = {
+    ember: "#ff5500",
+    vesper: "#a06bff",
+    hud: "#3fd8ff",
+    nebula: "#6fb0ff",
+    aura: "#7c66f5",
+    sketch: "#f04e23",
+  };
   Object.entries(THEMES).forEach(([id, meta]) => {
-    const b = el(`<button class="${(state.theme || "ember") === id ? "on" : ""}">${meta.label}</button>`);
+    const b = el(
+      `<button type="button" class="swatch ${(state.theme || "ember") === id ? "on" : ""}" aria-pressed="${(state.theme || "ember") === id}" aria-label="${meta.label} theme"><i style="background:${ACCENTS[id] || meta.color}"></i><span>${meta.label}</span></button>`
+    );
     b.onclick = () => {
       state.theme = id;
       persist();
