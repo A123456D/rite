@@ -1,4 +1,4 @@
-const CACHE = "rite-shell-v5";
+const CACHE = "rite-shell-v6";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
