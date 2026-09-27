@@ -43,6 +43,7 @@ import { SLOTS, defaultSlot, slotName, normalizeSlot, clockTime } from "./meals.
 import { barcodeSupported, lookupBarcode, scanBarcode } from "./barcode.js";
 import { createHeatCore } from "./core3d.js";
 import { rankMark } from "./ranks.js";
+import { getConfig, setEnabled as setNotifEnabled, setSlot as setNotifSlot, permission as notifPermission, requestPermission, startTicker, tickNotifs, SLOTS as NOTIF_SLOTS } from "./notify.js";
 import { APP_NAME, THEMES, heatBand, applyTheme } from "./themes.js";
 import { registerPwa, canInstall, promptInstall, isStandalone } from "./pwa.js";
 
@@ -52,6 +53,8 @@ const root = document.getElementById("app");
 let state = load();
 let tab = "arena";
 let core3d = null;
+let coreCanvas = null;
+let pendingFlare = 0;
 let foodQuery = "";
 let foodHits = searchLocal("");
 let selectedFood = null;
@@ -261,15 +264,12 @@ function commitFood(item, template, usedAmount) {
     return;
   }
   addFood(item, template, usedAmount);
+  pendingFlare = Math.min(1.3, 0.5 + (item.kcal || 100) / 900); // the core eats too
 }
 
 function render() {
   applyTheme(state.theme);
   document.documentElement.dataset.heatBand = heatBand(state.heat);
-  if (core3d) {
-    core3d.destroy();
-    core3d = null;
-  }
   root.innerHTML = "";
   if (!state.profile) {
     root.append(onboard());
@@ -289,16 +289,36 @@ function render() {
     stage.append(verdictStamp());
   }
 
-  // The 3D heat core mounts lazily (three.js is an async chunk); if the user
-  // re-rendered before it loads, the stale instance discards itself.
-  const coreCanvas = stage.querySelector(".core3d");
-  if (coreCanvas) {
+  // The 3D core keeps ONE canvas + WebGL context for the app's lifetime —
+  // re-attaching it across renders instead of recreating contexts per log.
+  const coreHost = stage.querySelector(".heat-core");
+  if (coreHost) {
+    if (!coreCanvas) coreCanvas = el('<canvas class="core3d" aria-hidden="true"></canvas>');
+    coreHost.appendChild(coreCanvas);
     const snap = snapshot();
-    createHeatCore(coreCanvas, snap.heat).then((inst) => {
-      if (!inst) return;
-      if (!coreCanvas.isConnected) inst.destroy();
-      else core3d = inst;
-    });
+    if (!core3d) {
+      createHeatCore(coreCanvas, snap.heat).then((inst) => {
+        if (!inst) return;
+        if (!coreCanvas.isConnected) {
+          inst.destroy();
+          return;
+        }
+        core3d = inst;
+        if (pendingFlare) {
+          core3d.flare(pendingFlare);
+          pendingFlare = 0;
+        }
+      });
+    } else {
+      core3d.setColors();
+      core3d.setHeat(snap.heat);
+      if (pendingFlare) {
+        core3d.flare(pendingFlare);
+        pendingFlare = 0;
+      }
+    }
+  } else if (coreCanvas && coreCanvas.isConnected) {
+    coreCanvas.remove(); // off-arena tab; instance stays warm for the return
   }
 
   // Tick the heat number from its previous value; cheap drama, honest numbers.
@@ -399,6 +419,32 @@ function meterClass(value, target, invertOver = true) {
   return "";
 }
 
+function dayEndsIn() {
+  const now = new Date();
+  const cut = new Date(now);
+  cut.setHours(3, 0, 0, 0);
+  let ms;
+  if (now < cut) {
+    ms = cut - now;
+  } else {
+    const next = new Date(cut);
+    next.setDate(next.getDate() + 1);
+    ms = next - now;
+  }
+  const mins = Math.max(1, Math.round(ms / 60000));
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h > 0 ? `${h}h ${String(m).padStart(2, "0")}m` : `${m}m`;
+}
+
+function updateDeadlineNodes() {
+  document.querySelectorAll("[data-deadline]").forEach((node) => {
+    const urgent = new Date().getHours() === 2;
+    node.classList.toggle("urgent", urgent);
+    node.innerHTML = `<i class="dot" aria-hidden="true"></i>Day ends in <b>${dayEndsIn()}</b>`;
+  });
+}
+
 function arena() {
   const snap = snapshot();
   const { live, heat, locked, lockedDelta } = snap;
@@ -410,6 +456,19 @@ function arena() {
   const swing = locked ? lockedDelta : live.preview;
   const backupAgeDays = state.lastBackupAt ? Math.floor((Date.now() - state.lastBackupAt) / 86400000) : null;
   const today = new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+  const loggedToday = snap.day.foods.length + snap.day.workouts.length > 0;
+  let streakText = "";
+  let streakCls = "";
+  if (locked) {
+    streakText = `Day locked · streak ${state.streak}d`;
+  } else if (!loggedToday && state.streak > 0) {
+    streakCls = "risk";
+    streakText = `${state.streak}d streak dies at the cutoff`;
+  } else if (!loggedToday) {
+    streakText = "Log today to light a streak";
+  } else {
+    streakText = `Streak · ${state.streak}d and climbing`;
+  }
   const box = el(`
     <section class="screen arena">
       <section class="sect hero-heat">
@@ -420,6 +479,8 @@ function arena() {
         </div>
         <div class="heat-line" role="img" aria-label="heat ${heat} of 100"><i style="width:${Math.round(heat)}%"></i></div>
         <p class="swing-line">${locked ? "Locked" : "Live swing"} · <b class="swing-pill ${swing >= 0 ? "up" : "down"}">${swing >= 0 ? "+" : ""}${swing}</b></p>
+        <p class="deadline" data-deadline><i class="dot" aria-hidden="true"></i>Day ends in <b>${dayEndsIn()}</b></p>
+        <p class="streak-line ${streakCls}">${streakText}</p>
         <p class="heat-cap">${escapeHtml(heatCaption(heat))}</p>
       </section>
       ${
@@ -1070,6 +1131,7 @@ function train() {
     workoutNote = "";
     setDay(state, todayKey(), d);
     persist();
+    pendingFlare = 0.9; // iron stokes the fire
     tab = "arena";
     render();
   };
@@ -1275,6 +1337,57 @@ function verdict() {
   return box;
 }
 
+function drawNotifArea(na) {
+  if (!na) return;
+  na.innerHTML = "";
+  if (notifPermission() === "unsupported") {
+    na.append(el(`<p class="tiny">This browser has no notification system. The fire stays watched the old way.</p>`));
+    return;
+  }
+  if (notifPermission() === "denied") {
+    na.append(
+      el(`<p class="tiny">Notifications are blocked for this site. Allow them in the browser's site settings, then come back here.</p>`)
+    );
+    return;
+  }
+  if (notifPermission() === "default") {
+    const b = el(`<button class="btn" type="button">Enable notifications</button>`);
+    b.onclick = async () => {
+      await requestPermission();
+      render();
+    };
+    na.append(b);
+    na.append(el(`<p class="tiny">One prompt. Nothing leaves this device.</p>`));
+    return;
+  }
+  const cfg = getConfig();
+  const master = el(
+    `<button type="button" class="switch ${cfg.enabled ? "on" : ""}" role="switch" aria-checked="${cfg.enabled}" aria-label="All wake-ups"></button>`
+  );
+  master.onclick = () => {
+    setNotifEnabled(!cfg.enabled);
+    render();
+  };
+  const head = el(`<div class="notif-row master"><div><b>All wake-ups</b><span class="nt">${cfg.enabled ? "listening" : "muted"}</span></div></div>`);
+  head.append(master);
+  na.append(head);
+  NOTIF_SLOTS.forEach((slot) => {
+    const on = cfg.slots[slot.id];
+    const sw = el(
+      `<button type="button" class="switch ${on && cfg.enabled ? "on" : ""}" role="switch" aria-checked="${on}" aria-label="${slot.label}"></button>`
+    );
+    sw.onclick = () => {
+      setNotifSlot(slot.id, !on);
+      render();
+    };
+    const row = el(
+      `<div class="notif-row ${cfg.enabled ? "" : "dim"}"><div><b>${slot.label}</b><span class="nt">${slot.time}</span></div></div>`
+    );
+    row.append(sw);
+    na.append(row);
+  });
+}
+
 function self() {
   const p = state.profile;
   const t = targets(profile());
@@ -1336,6 +1449,11 @@ function self() {
         <div class="chips" id="theme-chips"></div>
       </div>
       <div class="glass pad">
+        <header class="kicker">Wake-ups</header>
+        <p class="lede">Ash taps the glass when the day needs you. Works while RITE is running — installed, or a tab that's still alive.</p>
+        <div id="notif-area"></div>
+      </div>
+      <div class="glass pad">
         <header class="kicker">Food database</header>
         <p class="lede">Packaged products are free forever. USDA basics work without a key, but a personal free key stops the throttling.</p>
         <div class="field"><label>USDA FDC API key (optional)</label><input id="usda" placeholder="paste key from api.data.gov" value="${escapeHtml(getUsdaKey())}" /></div>
@@ -1384,6 +1502,8 @@ function self() {
     };
     themeChips.append(b);
   });
+
+  drawNotifArea(box.querySelector("#notif-area"));
   box.querySelector("#usda-save").onclick = () => {
     const key = box.querySelector("#usda").value.trim();
     setUsdaKey(key);
@@ -1522,5 +1642,25 @@ window.addEventListener("rite-update", () => {
   toast.querySelector("button").onclick = () => window.location.reload();
   document.body.append(toast);
 });
+
+function notifContext() {
+  const d = today();
+  return {
+    heat: state.heat,
+    logged: d.foods.length + d.workouts.length > 0,
+    streak: state.streak,
+  };
+}
+
+function showToast(text) {
+  document.querySelector(".rite-toast")?.remove();
+  const t = el(`<div class="rite-toast" role="status"><span>${escapeHtml(text)}</span></div>`);
+  document.body.append(t);
+  setTimeout(() => t.remove(), 5200);
+}
+
+addEventListener("rite-notify", (e) => showToast(e.detail.body));
+startTicker(notifContext);
+setInterval(updateDeadlineNodes, 30000);
 
 render();

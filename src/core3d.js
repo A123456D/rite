@@ -204,6 +204,7 @@ export async function createHeatCore(canvas, initialHeat = 50) {
   // heat drives everything; eased toward the live value
   let heat = initialHeat / 100;
   let heatShown = heat;
+  let flareT = 0;
   let targetRotY = 0;
   let targetRotX = 0;
   let velY = 0;
@@ -213,6 +214,21 @@ export async function createHeatCore(canvas, initialHeat = 50) {
 
   function setHeat(v) {
     heat = Math.max(0, Math.min(1, v / 100));
+  }
+
+  // a log lands: the core flares, spins, and throws embers
+  function flare(strength = 1) {
+    flareT = Math.min(1.6, flareT + strength);
+    velY += 0.004 * strength;
+  }
+
+  // re-read the theme palette (called after a theme switch re-renders)
+  function setColors() {
+    deep.set(...hexToRGB(cssVar("--ember-2", "#d34000"))).multiplyScalar(0.22);
+    mid.set(...hexToRGB(cssVar("--ember", "#ff5500")));
+    hot.set(...hexToRGB(cssVar("--hot", "#ffb060")));
+    halo.material.color.copy(mid);
+    emberMat.color.copy(hot);
   }
 
   // drag to spin (vertical scroll still passes through)
@@ -271,20 +287,24 @@ export async function createHeatCore(canvas, initialHeat = 50) {
   let raf = 0;
 
   function frame() {
+    if (!canvas.isConnected) return; // canvas left the DOM; IO restarts us later
     const t = clock.getElapsedTime();
     heatShown += (heat - heatShown) * 0.05;
     const h = heatShown;
+    flareT *= 0.94;
+    const f = flareT;
 
     uniforms.uTime.value = t;
-    uniforms.uAmp.value = 0.08 + 0.3 * h;
+    uniforms.uAmp.value = 0.08 + 0.3 * h + 0.18 * f;
     uniforms.uSpeed.value = 0.3 + 1.0 * h;
-    uniforms.uGlow.value = 0.15 + 0.85 * h;
-    uniforms.uDim.value = 0.5 + 0.5 * h;
-    blob.scale.setScalar(0.5 + 0.55 * h);
-    halo.scale.setScalar(2.3 + 1.7 * h);
-    halo.material.opacity = 0.22 + 0.55 * h;
-    emberMat.opacity = 0.3 + 0.6 * h;
-    emberMat.size = 0.045 + 0.03 * h;
+    uniforms.uGlow.value = 0.15 + 0.85 * h + 0.9 * f;
+    uniforms.uDim.value = Math.min(1.4, 0.5 + 0.5 * h + 0.45 * f);
+    blob.scale.setScalar(0.5 + 0.55 * h + 0.1 * f);
+    halo.scale.setScalar(2.3 + 1.7 * h + 0.8 * f);
+    halo.material.opacity = Math.min(1, 0.22 + 0.55 * h + 0.4 * f);
+    emberMat.opacity = Math.min(1, 0.3 + 0.6 * h + 0.5 * f);
+    emberMat.size = 0.045 + 0.03 * h + 0.05 * f;
+    targetRotY += 0.018 * f;
 
     if (!dragging) {
       targetRotY += 0.0016 + velY + 0.004 * h;
@@ -312,12 +332,14 @@ export async function createHeatCore(canvas, initialHeat = 50) {
   const ioStart = new IntersectionObserver(startIfVisible, { threshold: 0.05 });
   ioStart.observe(canvas);
   const onVisStart = () => {
-    if (!document.hidden) start();
+    if (!document.hidden && canvas.isConnected) start();
   };
   document.addEventListener("visibilitychange", onVisStart);
 
   return {
     setHeat,
+    flare,
+    setColors,
     destroy() {
       cancelAnimationFrame(raf);
       ro.disconnect();
