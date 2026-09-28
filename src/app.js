@@ -673,16 +673,17 @@ function fuel() {
         <div class="panel-num">${Math.round(live.tot.kcal)}<span> / ${live.t.kcal} kcal</span></div>
         <p class="heat-cap">${
           locked
-            ? "Today is settled. This log is a diary entry now — Verdict → Reopen today if it needs to count."
+            ? "Today is settled — this is a diary entry now. Verdict → Reopen today if it needs to count."
             : fuelMode === "plan"
-              ? `Planning ${slotName(mealSlot)} · does not move Heat until you eat it.`
-              : `Live heat ${snap.heat}. Logging ${slotName(mealSlot)}.`
+              ? `Planning ${slotName(mealSlot)} — nothing counts until you eat it.`
+              : `Logging ${slotName(mealSlot)}.`
         }</p>
         <div class="meter fat"><i style="width:${Math.min(100, (live.tot.kcal / Math.max(live.t.kcal, 1)) * 100)}%"></i></div>
+        <p class="micro">Quick add — just calories</p>
         <div class="quick-row ${locked ? "locked" : ""}">
           <input id="quick-kcal" type="number" inputmode="numeric" min="0" placeholder="kcal" aria-label="Quick add kcal" ${locked ? "disabled" : ""} />
-          <input id="quick-pro" type="number" inputmode="numeric" min="0" placeholder="p" aria-label="Quick add protein" ${locked ? "disabled" : ""} />
-          <button class="btn" id="quick-log" type="button" ${locked ? "disabled" : ""}>Log</button>
+          <input id="quick-pro" type="number" inputmode="numeric" min="0" placeholder="protein g" aria-label="Quick add protein" ${locked ? "disabled" : ""} />
+          <button class="btn" id="quick-log" type="button" ${locked ? "disabled" : ""}>Add</button>
         </div>
         <div class="chips" id="modes"></div>
         <div class="chips" id="slots"></div>
@@ -690,14 +691,14 @@ function fuel() {
       </div>
       <div class="fuel-grid">
       <div class="glass pad">
-        <header class="kicker">Pantry · ${FOODS.length} on device</header>
-        <p class="tiny">Type a food. Local hits first, then packaged products + USDA. Results cache for two weeks.</p>
+        <header class="kicker">Find a food</header>
+        <p class="tiny">Search ${FOODS.length} foods stored on this device — then packaged products and USDA.</p>
         <div class="search">
-          <input id="q" placeholder="200g penne, chicken thigh, carbonara…" value="${escapeHtml(foodQuery)}" />
+          <input id="q" placeholder="Search food — try '200g oats'" value="${escapeHtml(foodQuery)}" />
         </div>
         <div class="barcode-row">
           ${barcodeSupported() ? `<button class="btn ghost" id="scan" type="button">Scan barcode</button>` : ""}
-          <input id="code-in" inputmode="numeric" placeholder="…or type a barcode" aria-label="Barcode number" />
+          <input id="code-in" inputmode="numeric" placeholder="Type a barcode" aria-label="Barcode number" />
           <button class="btn ghost" id="code-go" type="button">Find</button>
         </div>
         <p class="tiny" id="code-status"></p>
@@ -705,6 +706,10 @@ function fuel() {
         <div id="scaler" class="${selectedFood ? "" : "hidden"}"></div>
         <div id="usual"></div>
         <div class="list" id="hits"></div>
+      </div>
+      <div class="glass pad">
+        <header class="kicker" id="diary-kicker">${fuelMode === "plan" ? "The plan" : "Today's food"}</header>
+        <div class="list" id="plate"></div>
       </div>
       ${
         meals.length && !locked
@@ -715,8 +720,8 @@ function fuel() {
           : ""
       }
       <div class="glass pad custom-offer">
-        <header class="kicker">Custom offering</header>
-        <p class="lede">If it isn't in the pantry, log it. Guessing low is how Heat lies.</p>
+        <header class="kicker">Add your own</header>
+        <p class="lede">Not in the list? Copy it from the label. When unsure, guess low.</p>
         <div class="field"><label>Name</label><input id="cname" placeholder="Late-night whatever" /></div>
         <div class="macro-grid">
           <div class="field"><label>Kcal</label><input id="ckcal" type="number" value="250" /></div>
@@ -725,15 +730,12 @@ function fuel() {
           <div class="field"><label>Fat</label><input id="cfat" type="number" value="8" /></div>
           <div class="field"><label>Sat fat (g)</label><input id="csat" type="number" value="0" /></div>
         </div>
-        <button class="btn ghost" type="button" id="cadd" ${locked ? "disabled" : ""}>${fuelMode === "plan" ? "Add custom to plan" : "Log custom"}</button>
-      </div>
-      <div class="glass pad">
-        <header class="kicker" id="diary-kicker">${fuelMode === "plan" ? "Meal plan" : "Today's plate"}</header>
-        <div class="list" id="plate"></div>
+        <button class="btn ghost" type="button" id="cadd" ${locked ? "disabled" : ""}>${fuelMode === "plan" ? "Add to plan" : "Add it"}</button>
       </div>
       </div>
     </section>
   `);
+
 
   const modes = box.querySelector("#modes");
   box.querySelector("#quick-log").onclick = () => {
@@ -752,8 +754,8 @@ function fuel() {
     box.querySelector("#quick-kcal")?.focus();
   }
   [
-    ["log", "Log"],
-    ["plan", "Plan"],
+    ["log", "Log food"],
+    ["plan", "Plan ahead"],
   ].forEach(([id, label]) => {
     const b = el(`<button class="${fuelMode === id ? "on" : ""}">${label}</button>`);
     b.onclick = () => {
@@ -787,13 +789,13 @@ function fuel() {
 
   const usual = box.querySelector("#usual");
   if (favs.length) {
-    usual.append(el(`<p class="tiny" style="margin:8px 0">Pinned</p>`));
+    usual.append(el(`<p class="tiny" style="margin:8px 0">Favorites</p>`));
     const list = el(`<div class="list"></div>`);
     favs.forEach((f) => list.append(foodButton(f, " · pinned")));
     usual.append(list);
   }
   if (recents.length) {
-    usual.append(el(`<p class="tiny" style="margin:12px 0 8px">Usual suspects</p>`));
+    usual.append(el(`<p class="tiny" style="margin:12px 0 8px">Your regulars</p>`));
     const list = el(`<div class="list"></div>`);
     recents.slice(0, 8).forEach((f) => list.append(foodButton(f, " · again")));
     usual.append(list);
