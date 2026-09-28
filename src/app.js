@@ -51,6 +51,8 @@ import { rankMark } from "./ranks.js";
 import { getConfig, setEnabled as setNotifEnabled, setSlot as setNotifSlot, permission as notifPermission, requestPermission, startTicker, tickNotifs, SLOTS as NOTIF_SLOTS } from "./notify.js";
 import { APP_NAME, THEMES, heatBand, applyTheme } from "./themes.js";
 import { registerPwa, canInstall, promptInstall, isStandalone } from "./pwa.js";
+import { drawBoardCard } from "./board-ui.js";
+import { publishWeek, fetchBoard, boardName, setBoardName, clientId } from "./board.js";
 
 if (import.meta.env.PROD) registerPwa();
 
@@ -77,6 +79,10 @@ let editingFoodId = null;
 let lastShownHeat = null;
 let stamp = null; // verdict-stamp payload after closing the day
 let weekStamp = null; // week-verdict-stamp payload after closing a week
+let builderOpen = false;
+let builderItems = [];
+let builderQuery = "";
+let builderName = "";
 
 const NAV_ICONS = {
   arena: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5c1 4.5 6.5 6.5 6.5 12a6.5 6.5 0 0 1-13 0c0-5.5 5.5-7.5 6.5-12z"/><path d="M12 11c.5 2.2 2.6 3 2.6 5.4a2.6 2.6 0 0 1-5.2 0C9.4 14 11.5 13.2 12 11z"/></svg>`,
@@ -721,6 +727,12 @@ function fuel() {
         <p class="tiny">${fuelMode === "plan" ? "Nothing here counts until you eat it." : "Everything you've logged today."}</p>
         <div class="list" id="plate"></div>
       </div>
+      ${locked ? "" : `<div class="glass pad">
+        <header class="kicker">Build a meal</header>
+        <p class="tiny">Combine ingredients into a reusable meal.</p>
+        <button class="btn ghost" id="mb-open" type="button">Build a meal</button>
+        <div id="meal-builder"></div>
+      </div>`}
       ${
         meals.length && !locked
           ? `<div class="glass pad">
@@ -1099,6 +1111,100 @@ function fuel() {
     });
   }
 
+  function drawBuilder() {
+    const wrap = box.querySelector("#meal-builder");
+    if (!wrap) return;
+    if (!builderOpen) {
+      wrap.innerHTML = "";
+      return;
+    }
+    const hits = builderQuery ? searchLocal(builderQuery).slice(0, 6) : [];
+    const t = builderItems.reduce(
+      (a, i) => ({ kcal: a.kcal + i.kcal, p: a.p + i.protein, c: a.c + i.carbs, f: a.f + i.fat, s: a.s + (i.satfat || 0) }),
+      { kcal: 0, p: 0, c: 0, f: 0, s: 0 }
+    );
+    wrap.innerHTML = `
+      <div class="builder">
+        <div class="field"><label>Meal name</label><input id="mb-name" maxlength="40" placeholder="Sunday prep bowl" value="${escapeHtml(builderName)}" /></div>
+        <div class="search"><input id="mb-q" placeholder="Add ingredient — search food…" value="${escapeHtml(builderQuery)}" /></div>
+        <div class="list" id="mb-hits">${hits.map((f) => `<button type="button" class="row" data-id="${f.id}"><div><strong>${escapeHtml(f.name)}</strong><div class="meta">${Math.round(f.kcal)} kcal / 100g</div></div></button>`).join("")}</div>
+        <div class="list" id="mb-items">${builderItems.map((i, ix) => `
+          <div class="row mb-row">
+            <div><strong>${escapeHtml(i.name)}</strong>
+            <div class="meta"><input class="mb-grams" data-ix="${ix}" type="number" min="1" value="${i.amount}" /> g · ${i.kcal} kcal</div></div>
+            <button class="x mb-x" data-ix="${ix}" type="button" aria-label="remove">×</button>
+          </div>`).join("")}</div>
+        <p class="tiny preview-macros">Per meal: ${t.kcal} kcal · ${t.p}p · ${t.c}c · ${t.f}f${t.s ? ` · ${t.s} sat fat` : ""}</p>
+        <div class="week-actions"><button class="btn" id="mb-save" type="button" ${builderItems.length < 2 ? "disabled" : ""}>Save meal</button></div>
+      </div>`;
+    const q = wrap.querySelector("#mb-q");
+    q.oninput = (e) => {
+      builderQuery = e.target.value;
+      const caret = e.target.selectionStart;
+      drawBuilder();
+      const nq = wrap.querySelector("#mb-q");
+      if (nq) nq.setSelectionRange(caret, caret);
+    };
+    wrap.querySelectorAll("#mb-hits .row").forEach((hitEl) => {
+      hitEl.onclick = () => {
+        const f = searchLocal(builderQuery).find((x) => x.id === hitEl.dataset.id);
+        if (!f) return;
+        builderItems.push({
+          name: f.name,
+          amount: 100,
+          unit: "g",
+          kcal: Math.round(f.kcal),
+          protein: Math.round((f.protein || 0) * 10) / 10,
+          carbs: Math.round((f.carbs || 0) * 10) / 10,
+          fat: Math.round((f.fat || 0) * 10) / 10,
+          satfat: f.satfat != null ? Math.round(f.satfat * 10) / 10 : null,
+          base: { kcal: f.kcal, protein: f.protein || 0, carbs: f.carbs || 0, fat: f.fat || 0, unit: 100, ...(f.satfat != null ? { satfat: f.satfat } : {}) },
+        });
+        builderQuery = "";
+        drawBuilder();
+      };
+    });
+    wrap.querySelectorAll(".mb-grams").forEach((input) => {
+      input.onchange = (e) => {
+        const ix = Number(e.target.dataset.ix);
+        const amt = Math.max(1, Number(e.target.value) || 100);
+        const it = builderItems[ix];
+        const mul = amt / (it.base.unit || 100);
+        const round = (n) => Math.round(n * 10) / 10;
+        it.amount = amt;
+        it.kcal = Math.round(it.base.kcal * mul);
+        it.protein = round(it.base.protein * mul);
+        it.carbs = round(it.base.carbs * mul);
+        it.fat = round(it.base.fat * mul);
+        if (it.base.satfat != null) it.satfat = round(it.base.satfat * mul);
+        drawBuilder();
+      };
+    });
+    wrap.querySelectorAll(".mb-x").forEach((x) => {
+      x.onclick = () => {
+        builderItems.splice(Number(x.dataset.ix), 1);
+        drawBuilder();
+      };
+    });
+    const nameInput = wrap.querySelector("#mb-name");
+    nameInput.oninput = (e) => { builderName = e.target.value; };
+    wrap.querySelector("#mb-save").onclick = () => {
+      if (builderItems.length < 2) return;
+      saveMeal(state, {
+        id: crypto.randomUUID(),
+        name: (builderName.trim() || "My meal").slice(0, 40),
+        slot: mealSlot,
+        items: builderItems.map(({ name, amount, kcal, protein, carbs, fat, base }) => ({ name, amount, unit: "g", kcal, protein, carbs, fat, base })),
+      });
+      persist();
+      builderOpen = false;
+      builderItems = [];
+      builderName = "";
+      render();
+    };
+  }
+  drawBuilder();
+
   function drawMeals() {
     const wrap = box.querySelector("#meals");
     if (!wrap) return;
@@ -1177,6 +1283,11 @@ function fuel() {
   drawScaler();
   drawPlate();
   drawMeals();
+  box.querySelector("#mb-open")?.addEventListener("click", () => {
+    if (locked) return;
+    builderOpen = !builderOpen;
+    drawBuilder();
+  });
   box.querySelector("#cadd").onclick = () => {
     if (locked) return;
     const name = box.querySelector("#cname").value.trim() || "Unnamed regret";
@@ -1586,6 +1697,7 @@ function self() {
         <p class="lede">XP is the climb. Heat is the weather. You are ${escapeHtml(mine.name)}.</p>
         <div class="rank-ladder">${ladder}</div>
       </div>
+      <div class="glass pad" id="board-card"></div>
       <div class="glass pad">
         <header class="kicker">Look</header>
         <p class="lede">Same fire, different sky.</p>
@@ -1647,6 +1759,12 @@ function self() {
   });
 
   drawNotifArea(box.querySelector("#notif-area"));
+  drawBoardCard(box.querySelector("#board-card"), {
+    weeks: state.weeks || [],
+    streak: state.streak,
+    rankName: rankFor(state.xp).name,
+    xp: state.xp,
+  });
   box.querySelector("#usda-save").onclick = () => {
     const key = box.querySelector("#usda").value.trim();
     setUsdaKey(key);
