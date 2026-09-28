@@ -1401,6 +1401,40 @@ h3,
   margin: 12px 0 4px;
   color: var(--gold);
 }
+/* The Week: tier word + stamp variant */
+.week-tier {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 40px;
+  letter-spacing: 0.01em;
+  color: var(--bright);
+  margin: 2px 0 8px;
+}
+.week-tier.dim {
+  opacity: 0.45;
+}
+.week-actions {
+  padding: 18px 0 0;
+  margin: 0;
+}
+.stamp-kicker {
+  margin: 0 0 10px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+.stamp-tier {
+  font-family: var(--display);
+  font-weight: 700;
+  font-style: italic;
+  font-size: 24px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ember);
+  margin: 2px 0 4px;
+}
 
 /* --- Toast & scan modal ----------------------------------------------------------------- */
 .rite-toast {

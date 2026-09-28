@@ -36,6 +36,10 @@ import {
   weightMovingAverage,
   clampHeat,
   RANKS,
+  WEEK_DAYS,
+  pendingWeekDays,
+  weekReport,
+  settleWeek,
 } from "./engine.js";
 import { lineForLive, verdictCopy, heatCaption, morningFrom } from "./coach.js";
 import { searchLocal, scaleFood, rescaleItem, searchAnywhere, FOODS, getUsdaKey, setUsdaKey } from "./foods.js";
@@ -70,6 +74,7 @@ let saveMsg = "";
 let editingFoodId = null;
 let lastShownHeat = null;
 let stamp = null; // verdict-stamp payload after closing the day
+let weekStamp = null; // week-verdict-stamp payload after closing a week
 
 const NAV_ICONS = {
   arena: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5c1 4.5 6.5 6.5 6.5 12a6.5 6.5 0 0 1-13 0c0-5.5 5.5-7.5 6.5-12z"/><path d="M12 11c.5 2.2 2.6 3 2.6 5.4a2.6 2.6 0 0 1-5.2 0C9.4 14 11.5 13.2 12 11z"/></svg>`,
@@ -288,6 +293,9 @@ function render() {
   if (stamp) {
     stage.append(verdictStamp());
   }
+  if (weekStamp) {
+    stage.append(weekStampOverlay());
+  }
 
   // The 3D core keeps ONE canvas + WebGL context for the app's lifetime —
   // re-attaching it across renders instead of recreating contexts per log.
@@ -363,6 +371,76 @@ function verdictStamp() {
     render();
   };
   return overlay;
+}
+
+function weekStampOverlay() {
+  const w = weekStamp;
+  const overlay = el(`
+    <div class="verdict-stamp" role="alertdialog" aria-label="Week verdict">
+      <div class="stamp-card">
+        <div class="stamp-rule"></div>
+        <p class="stamp-kicker">Week verdict</p>
+        <h2 class="stamp-headline">${escapeHtml(w.headline)}</h2>
+        <div class="stamp-tier">${escapeHtml(w.tier)}</div>
+        <div class="stamp-delta ${w.stats.avgDelta >= 0 ? "up" : "down"}">${w.stats.avgDelta >= 0 ? "+" : ""}${w.stats.avgDelta}<span> avg heat</span></div>
+        <p class="stamp-body">${escapeHtml(w.narrative)}</p>
+        <p class="tiny">+${w.xpBonus} XP banked</p>
+        <button class="btn" type="button">See the ledger</button>
+      </div>
+    </div>
+  `);
+  overlay.querySelector("button").onclick = () => {
+    weekStamp = null;
+    render();
+  };
+  return overlay;
+}
+
+function drawWeekCard(card) {
+  const weeks = state.weeks || [];
+  const pending = pendingWeekDays(state);
+  const n = Math.min(pending.length, WEEK_DAYS);
+  let html = `<header class="kicker">The week</header>`;
+  if (pending.length >= WEEK_DAYS) {
+    const rep = weekReport(pending, weeks[0]);
+    html += `
+      <p class="week-tier">${escapeHtml(rep.tier)}</p>
+      <p class="lede">${escapeHtml(rep.narrative)}</p>
+      ${dataRow("Avg energy", rep.stats.avgKcal.toLocaleString(), `${rep.stats.avgT} kcal`, rep.stats.avgT ? rep.stats.avgKcal / rep.stats.avgT : 0)}
+      ${dataRow("Protein hits", `${rep.stats.proteinHits}`, `${WEEK_DAYS} days`, rep.stats.proteinHits / WEEK_DAYS)}
+      ${dataRow("Trained", `${rep.stats.trainedDays}`, `${WEEK_DAYS} days`, rep.stats.trainedDays / WEEK_DAYS)}
+      ${dataRow("Avg heat", `${rep.stats.avgHeat}`, "100", rep.stats.avgHeat / 100)}
+      <div class="actions week-actions">
+        <button class="btn" id="settle-week" type="button">Settle the week</button>
+        <p class="tiny">+${rep.xpBonus} XP on settle. The seven days stay locked.</p>
+      </div>
+    `;
+  } else if (weeks.length) {
+    const w = weeks[0];
+    html += `
+      <p class="week-tier dim">${escapeHtml(w.tier)}</p>
+      <p class="lede">${escapeHtml(w.headline)} ${w.stats.avgDelta >= 0 ? "+" : ""}${w.stats.avgDelta} average. +${w.xpBonus} XP banked.</p>
+      <div class="rank-track fat"><i style="width:${Math.round((n / WEEK_DAYS) * 100)}%"></i></div>
+      <p class="tiny">Next week closes in ${WEEK_DAYS - n} more settled day${WEEK_DAYS - n === 1 ? "" : "s"}.</p>
+    `;
+  } else {
+    html += `
+      <p class="lede">${WEEK_DAYS - n} more settled day${WEEK_DAYS - n === 1 ? "" : "s"} until the first week verdict.</p>
+      <div class="rank-track fat"><i style="width:${Math.round((n / WEEK_DAYS) * 100)}%"></i></div>
+      <p class="tiny">Close your days — the week reads the ledger, not the live log.</p>
+    `;
+  }
+  card.innerHTML = html;
+  const settle = card.querySelector("#settle-week");
+  if (settle) {
+    settle.onclick = () => {
+      const res = settleWeek(state);
+      if (!res.ok) return;
+      persist();
+      weekStamp = res.record;
+      render();
+    };
+  }
 }
 
 function chrome() {
@@ -1202,6 +1280,7 @@ function verdict() {
         <button class="btn ghost" id="confess">${day.confessed ? "Confession noted" : "Confess a slip (counts on a bad-calorie day)"}</button>
         ${locked ? `<button class="btn ghost" id="reopen">Reopen today</button>` : ""}
       </div>
+      <div class="glass pad" id="week-card"></div>
       <div class="glass pad trace">
         <header class="kicker">The scale</header>
         <header class="trace-head">
@@ -1237,6 +1316,7 @@ function verdict() {
     </section>
   `);
   const card = box.querySelector("#card");
+  drawWeekCard(box.querySelector("#week-card"));
   if (last && last.day === todayKey() && day.verdictShown) {
     const copy = last.line ? { headline: last.headline, body: last.line } : verdictCopy(last);
     card.innerHTML = `

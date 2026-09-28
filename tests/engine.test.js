@@ -13,6 +13,10 @@ import {
   clampHeat,
   logWeighIn,
   deleteWeighIn,
+  weekReport,
+  settleWeek,
+  pendingWeekDays,
+  WEEK_DAYS,
 } from "../src/engine.js";
 
 const T = { tdee: 2000, kcal: 2000, protein: 140, fat: 62, carbs: 220 };
@@ -203,5 +207,70 @@ describe("dayTotals", () => {
       ],
     });
     expect(tot).toEqual({ kcal: 350, protein: 15, carbs: 30, fat: 12 });
+  });
+});
+
+describe("the week", () => {
+  const hday = (day, over = {}) => ({
+    day,
+    heat: 50,
+    delta: 0,
+    proteinHit: false,
+    trained: false,
+    tot: { kcal: 2000, protein: 100, carbs: 200, fat: 60 },
+    t: { kcal: 2000, protein: 140, carbs: 220, fat: 62 },
+    ...over,
+  });
+  const week = (fn = () => ({})) =>
+    Array.from({ length: WEEK_DAYS }, (_, i) => hday(`2026-09-${20 - i}`, fn(i)));
+
+  it("computes stats from seven settled days", () => {
+    const days = week((i) => ({
+      proteinHit: i < 5,
+      trained: i < 2,
+      delta: 2,
+      heat: 60,
+      tot: { kcal: 1800, protein: 120, carbs: 200, fat: 60 },
+    }));
+    const rep = weekReport(days);
+    expect(rep.stats.proteinHits).toBe(5);
+    expect(rep.stats.trainedDays).toBe(2);
+    expect(rep.stats.avgKcal).toBe(1800);
+    expect(rep.stats.avgDelta).toBe(2);
+    expect(rep.tier).toBe("Smolder");
+    expect(rep.xpBonus).toBe(70);
+  });
+
+  it("tiers the week by average delta", () => {
+    const tierFor = (delta) => weekReport(week(() => ({ delta }))).tier;
+    expect(tierFor(10)).toBe("Blaze");
+    expect(tierFor(4)).toBe("Burn");
+    expect(tierFor(-1)).toBe("Smolder");
+    expect(tierFor(-5)).toBe("Ash");
+  });
+
+  it("calls out the training-protein gap when it is wide", () => {
+    const days = week((i) => ({ trained: i < 3, proteinHit: i < 3 }));
+    const rep = weekReport(days);
+    expect(rep.narrative).toMatch(/training days you hit it 100%/);
+  });
+
+  it("settleWeek pays XP, records the week, and refuses a short week", () => {
+    const st = state({ xp: 100, history: week() });
+    const res = settleWeek(st);
+    expect(res.ok).toBe(true);
+    expect(st.xp).toBe(100 + res.record.xpBonus);
+    expect(st.weeks[0].endDay).toBe("2026-09-20");
+    expect(st.weeks[0].startDay).toBe("2026-09-14");
+    expect(settleWeek(st).ok).toBe(false);
+  });
+
+  it("pendingWeekDays only counts days newer than the last closed week", () => {
+    const st = state({
+      history: [hday("2026-09-28"), hday("2026-09-27"), ...week()],
+      weeks: [{ endDay: "2026-09-20" }],
+    });
+    expect(pendingWeekDays(st).every((d) => d.day > "2026-09-20")).toBe(true);
+    expect(pendingWeekDays(st).length).toBe(2);
   });
 });

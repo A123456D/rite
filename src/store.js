@@ -44,6 +44,7 @@ export function load() {
 export function migrate(state) {
   state.plans = state.plans || {};
   state.meals = state.meals || [];
+  state.weeks = state.weeks || [];
   state.theme = ["ember", "vesper", "hud", "nebula", "aura", "sketch"].includes(state.theme) ? state.theme : "ember";
   for (const day of Object.values(state.days || {})) {
     for (const f of day.foods || []) {

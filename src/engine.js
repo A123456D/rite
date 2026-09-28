@@ -248,6 +248,95 @@ export function reopenDay(state, day) {
   return { ok: true };
 }
 
+// ---------- The Week: every 7 settled days close into a verdict ----------
+export const WEEK_DAYS = 7;
+
+// The unsettled tail: settled days newer than the last closed week.
+export function pendingWeekDays(state) {
+  const last = state.weeks?.[0]?.endDay;
+  const hist = state.history || [];
+  if (!last) return hist.slice(0, WEEK_DAYS);
+  return hist.filter((h) => h.day > last).slice(0, WEEK_DAYS);
+}
+
+// Pure: 7 settled history entries → tier, Ash narrative, stats, XP bonus.
+export function weekReport(days, previous) {
+  const n = days.length;
+  const mean = (fn) => days.reduce((a, d) => a + fn(d), 0) / n;
+  const proteinHits = days.filter((d) => d.proteinHit).length;
+  const trainedDays = days.filter((d) => d.trained).length;
+  const avgKcal = Math.round(mean((d) => d.tot.kcal));
+  const avgT = Math.round(mean((d) => d.t.kcal));
+  const avgDelta = Math.round(mean((d) => d.delta) * 10) / 10;
+  const avgHeat = Math.round(mean((d) => d.heat));
+  const upDays = days.filter((d) => d.delta >= 0).length;
+
+  const rate = (arr) =>
+    arr.length ? Math.round((arr.filter((d) => d.proteinHit).length / arr.length) * 100) : null;
+  const trRate = rate(days.filter((d) => d.trained));
+  const restRate = rate(days.filter((d) => !d.trained));
+
+  let tier;
+  let headline;
+  if (avgDelta >= 8) {
+    tier = "Blaze";
+    headline = "The week burned.";
+  } else if (avgDelta >= 3) {
+    tier = "Burn";
+    headline = "A good fire.";
+  } else if (avgDelta > -3) {
+    tier = "Smolder";
+    headline = "Alive. Barely.";
+  } else {
+    tier = "Ash";
+    headline = "The week went cold.";
+  }
+  const xpBonus = 50 + { Blaze: 60, Burn: 40, Smolder: 20, Ash: 0 }[tier];
+
+  const sentences = [];
+  if (proteinHits === n) sentences.push(`Protein: ${n} for ${n}. Boring is the strategy.`);
+  else sentences.push(`Protein hit ${proteinHits} of ${n}.`);
+  if (trRate !== null && restRate !== null && trRate - restRate >= 25) {
+    sentences.push(`On training days you hit it ${trRate}% of the time — ${restRate}% on rest days. That gap is your week.`);
+  }
+  if (trainedDays === 0) sentences.push("Zero training. The iron waited all week.");
+  else sentences.push(`Trained ${trainedDays} of ${n} days.`);
+  const kcalDiff = avgKcal - avgT;
+  if (kcalDiff <= 0) sentences.push(`Averaged ${avgKcal} against a ${avgT} target — ${Math.abs(kcalDiff)} under.`);
+  else sentences.push(`Averaged ${avgKcal} against a ${avgT} target — ${kcalDiff} over. The plate knows.`);
+  sentences.push(`${upDays} days burned, ${n - upDays} cooled.`);
+  if (previous?.stats?.avgDelta !== undefined) {
+    const diff = Math.round((avgDelta - previous.stats.avgDelta) * 10) / 10;
+    sentences.push(diff >= 0 ? `Up ${diff} on last week.` : `Down ${Math.abs(diff)} from last week.`);
+  }
+
+  return {
+    tier,
+    headline,
+    narrative: sentences.join(" "),
+    xpBonus,
+    stats: { days: n, proteinHits, trainedDays, avgKcal, avgT, avgDelta, avgHeat, upDays },
+  };
+}
+
+// Locks the current 7-day tail into a week verdict and pays the bonus.
+export function settleWeek(state) {
+  const pending = pendingWeekDays(state);
+  if (pending.length < WEEK_DAYS) return { ok: false, reason: "short" };
+  const report = weekReport(pending, state.weeks?.[0]);
+  state.xp += report.xpBonus;
+  const record = {
+    ...report,
+    startDay: pending[pending.length - 1].day,
+    endDay: pending[0].day,
+    settledAt: Date.now(),
+  };
+  state.weeks = state.weeks || [];
+  state.weeks.unshift(record);
+  state.weeks = state.weeks.slice(0, 26);
+  return { ok: true, record };
+}
+
 export function liveDelta(day, profile, heat) {
   const t = targets(profile);
   const s = scoreDay(day, t, profile);
