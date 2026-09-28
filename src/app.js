@@ -205,14 +205,15 @@ function heatStrip(liveHeat) {
   `;
 }
 
-function dataRow(label, val, target, pct, over = false) {
+function dataRow(label, val, target, pct, over = false, hue = null, pace = null) {
   return `
-    <div class="data-row ${over ? "over" : ""}">
+    <div class="data-row ${over ? "over" : ""}"${hue ? ` style="--mh:${hue}"` : ""}>
       <div class="dr-head">
         <span>${label}</span>
         <b>${val}<em> / ${target}</em></b>
       </div>
       <div class="dr-meter"><i style="width:${Math.min(100, pct * 100).toFixed(1)}%"></i></div>
+      ${pace ? `<div class="dr-pace">${pace}</div>` : ""}
     </div>
   `;
 }
@@ -563,6 +564,14 @@ function arena() {
   const backupAgeDays = state.lastBackupAt ? Math.floor((Date.now() - state.lastBackupAt) / 86400000) : null;
   const today = new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
   const loggedToday = snap.day.foods.length + snap.day.workouts.length > 0;
+  // the tracking day runs 3am -> 3am
+  const now = new Date();
+  const dayStart = new Date(now);
+  dayStart.setHours(3, 0, 0, 0);
+  if (now < dayStart) dayStart.setDate(dayStart.getDate() - 1);
+  const elapsed = Math.min(1, Math.max(0, (now.getTime() - dayStart.getTime()) / 86400000));
+  const paceKcal = elapsed > 0.04 ? Math.round((t.kcal * elapsed) / 10) * 10 : 0;
+  const paceLine = paceKcal ? `On pace · ${paceKcal.toLocaleString()} kcal by 3am` : "";
   let streakText = "";
   let streakCls = "";
   if (locked) {
@@ -600,11 +609,11 @@ function arena() {
       </section>
       <section class="sect">
         <p class="micro">Today · ${today}</p>
-        ${dataRow("Calories", Math.round(tot.kcal).toLocaleString(), `${t.kcal}`, t.kcal ? tot.kcal / t.kcal : 0)}
-        ${dataRow("Protein", `${Math.round(tot.protein)}`, `${t.protein} g`, t.protein ? tot.protein / t.protein : 0)}
-        ${dataRow("Carbs", `${Math.round(tot.carbs)}`, `${t.carbs} g`, t.carbs ? tot.carbs / t.carbs : 0, meterClass(tot.carbs, t.carbs) === "over")}
-        ${dataRow("Fat", `${Math.round(tot.fat)}`, `${t.fat} g`, t.fat ? tot.fat / t.fat : 0, meterClass(tot.fat, t.fat) === "over")}
-        ${t.satfat ? dataRow("Saturated fat", `${Math.round(tot.satfat || 0)}`, `${t.satfat} g`, t.satfat ? (tot.satfat || 0) / t.satfat : 0, (tot.satfat || 0) > t.satfat) : ""}
+        ${dataRow("Calories", Math.round(tot.kcal).toLocaleString(), `${t.kcal}`, t.kcal ? tot.kcal / t.kcal : 0, false, null, paceLine)}
+        ${dataRow("Protein", `${Math.round(tot.protein)}`, `${t.protein} g`, t.protein ? tot.protein / t.protein : 0, false, "#ffb020")}
+        ${dataRow("Carbs", `${Math.round(tot.carbs)}`, `${t.carbs} g`, t.carbs ? tot.carbs / t.carbs : 0, meterClass(tot.carbs, t.carbs) === "over", "#e3c05a")}
+        ${dataRow("Fat", `${Math.round(tot.fat)}`, `${t.fat} g`, t.fat ? tot.fat / t.fat : 0, meterClass(tot.fat, t.fat) === "over", "#ff7a5c")}
+        ${t.satfat ? dataRow("Saturated fat", `${Math.round(tot.satfat || 0)}`, `${t.satfat} g`, t.satfat ? (tot.satfat || 0) / t.satfat : 0, (tot.satfat || 0) > t.satfat, "#ff4d4d") : ""}
         <div class="data-row train ${live.trained ? "good" : ""}">
           <div class="dr-head">
             <span>Training</span>

@@ -672,8 +672,25 @@ h3,
   display: block;
   height: 100%;
   border-radius: 99px;
-  background: linear-gradient(90deg, var(--ember-2), var(--ember));
+  background: var(--mh, linear-gradient(90deg, var(--ember-2), var(--ember)));
   transition: width 0.5s var(--ease-out);
+}
+/* limit macros (saturated fat): budget styling, red only as it fills */
+.data-row.limit .dr-meter {
+  background: rgba(255, 77, 77, 0.1);
+}
+.data-row.limit .dr-meter i {
+  background: var(--mh, #ff4d4d);
+}
+.dr-pace {
+  margin: -6px 0 17px;
+  text-align: right;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--mute);
+  font-variant-numeric: tabular-nums;
 }
 .data-row.over .dr-head b,
 .data-row.over .dr-head span { color: var(--bad); }
@@ -688,8 +705,8 @@ h3,
   text-transform: uppercase;
 }
 .data-row.train .dr-meter i { background: var(--track); }
-.data-row.train.good .dr-meter i { background: var(--ok); }
-.data-row.train.good .train-word { color: var(--ok); }
+.data-row.train.good .dr-meter i { background: var(--cool); }
+.data-row.train.good .train-word { color: var(--cool); }
 .meter {
   height: 5px;
   background: var(--track);
@@ -827,12 +844,13 @@ h3,
   opacity: 0;
 }
 .ember-day.ghost .body {
+  fill: none;
   stroke: var(--line);
-  stroke-width: 1.3;
+  stroke-width: 1.2;
+  opacity: 0.85;
 }
 .ember-day.ghost .core {
-  fill: var(--track);
-  opacity: 0.9;
+  opacity: 0;
 }
 .ember-day.up .blaze,
 .ember-day.today .blaze {
