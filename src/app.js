@@ -690,6 +690,15 @@ function fuel() {
         <div class="week-strip ${fuelMode === "plan" ? "" : "hidden"}" id="week"></div>
       </div>
       <div class="fuel-grid">
+      ${
+        (state.favorites || []).length || (state.recents || []).length
+          ? `<div class="glass pad">
+        <header class="kicker">Quick picks</header>
+        <p class="tiny">One tap logs what you usually eat.</p>
+        <div id="usual"></div>
+      </div>`
+          : ""
+      }
       <div class="glass pad">
         <header class="kicker">Find a food</header>
         <p class="tiny">Search ${FOODS.length} foods stored on this device — then packaged products and USDA.</p>
@@ -704,17 +713,19 @@ function fuel() {
         <p class="tiny" id="code-status"></p>
         <p class="tiny" id="lookup-status"></p>
         <div id="scaler" class="${selectedFood ? "" : "hidden"}"></div>
-        <div id="usual"></div>
+        <p class="micro">All foods</p>
         <div class="list" id="hits"></div>
       </div>
       <div class="glass pad">
         <header class="kicker" id="diary-kicker">${fuelMode === "plan" ? "The plan" : "Today's food"}</header>
+        <p class="tiny">${fuelMode === "plan" ? "Nothing here counts until you eat it." : "Everything you've logged today."}</p>
         <div class="list" id="plate"></div>
       </div>
       ${
         meals.length && !locked
           ? `<div class="glass pad">
         <header class="kicker">Saved meals</header>
+        <p class="tiny">Log a whole meal in one tap.</p>
         <div class="list" id="meals"></div>
       </div>`
           : ""
