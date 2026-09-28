@@ -52,6 +52,7 @@ import { getConfig, setEnabled as setNotifEnabled, setSlot as setNotifSlot, perm
 import { APP_NAME, THEMES, heatBand, applyTheme } from "./themes.js";
 import { registerPwa, canInstall, promptInstall, isStandalone } from "./pwa.js";
 import { drawBoardCard } from "./board-ui.js";
+import { foodIcon, catIcon, MEAL_ICON } from "./food-icons.js";
 import { publishWeek, fetchBoard, boardName, setBoardName, clientId } from "./board.js";
 
 if (import.meta.env.PROD) registerPwa();
@@ -297,6 +298,26 @@ function render() {
   if (tab === "verdict") stage.append(verdict());
   if (tab === "self") stage.append(self());
   stage.append(nav());
+  // kicker icons: every section header gets its glyph
+  const KICKER_ICON_RULES = [
+    [/find a food/, "search"], [/today's food/, "fuel"], [/the plan/, "calendar"],
+    [/quick picks/, "bolt"], [/saved meals/, "bookmark"], [/add your own/, "pencil"],
+    [/build a meal/, "plus"], [/the board/, "verdict"], [/wake-ups/, "bolt"],
+    [/ranks/, "verdict"], [/look/, "palette"], [/keep the fire/, "shield"],
+    [/food database/, "search"], [/the scale/, "muscle"], [/trends/, "trend"],
+    [/closed days/, "layers"], [/verdict/, "verdict"], [/^fuel$/, "fuel"],
+    [/^train$/, "train"], [/^self$/, "self"], [/21-day heat/, "arena"],
+  ];
+  stage.querySelectorAll(".kicker").forEach((k) => {
+    const t = k.textContent.trim().toLowerCase();
+    for (const [re, key] of KICKER_ICON_RULES) {
+      if (re.test(t)) {
+        k.insertAdjacentHTML("afterbegin", `<span class="k-ico" aria-hidden="true">${NAV_ICONS[key] || ""}</span>`);
+        break;
+      }
+    }
+  });
+
   root.append(stage);
 
   if (stamp) {
@@ -662,6 +683,7 @@ function foodButton(f, extra = "") {
       </div>
     </button>
   `);
+  row.insertAdjacentHTML("afterbegin", foodIcon(f, 30));
   row.onclick = () => {
     selectedFood = f;
     amount =
@@ -721,7 +743,7 @@ function fuel() {
           <input id="q" placeholder="Search food — try '200g oats'" value="${escapeHtml(foodQuery)}" />
         </div>
         <div class="barcode-row">
-          ${barcodeSupported() ? `<button class="btn ghost" id="scan" type="button">Scan barcode</button>` : ""}
+          ${barcodeSupported() ? `<button class="btn ghost" id="scan" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" style="width:14px;height:14px;vertical-align:-2px;margin-right:6px"><path d="M4 7V4h3M17 4h3v3M20 17v3h-3M7 20H4v-3M7 12h10"/></svg>Scan barcode</button>` : ""}
           <input id="code-in" inputmode="numeric" placeholder="Type a barcode" aria-label="Barcode number" />
           <button class="btn ghost" id="code-go" type="button">Find</button>
         </div>
@@ -974,6 +996,7 @@ function fuel() {
               </div>
             </div>
           `);
+          row.insertAdjacentHTML("afterbegin", foodIcon(f, 30));
           const eat = row.querySelector(".eat");
           if (eat) {
             eat.onclick = () => {
@@ -1101,6 +1124,7 @@ function fuel() {
             </div>
           </div>
         `);
+        row.insertAdjacentHTML("afterbegin", foodIcon(f, 30));
         const editBtn = row.querySelector(".edit");
         if (editBtn) {
           editBtn.onclick = () => {
@@ -1138,7 +1162,7 @@ function fuel() {
         <div class="search"><input id="mb-q" placeholder="Add ingredient — search food…" value="${escapeHtml(builderQuery)}" /></div>
         <div class="list" id="mb-hits">${hits.map((f) => `<button type="button" class="row" data-id="${f.id}"><div><strong>${escapeHtml(f.name)}</strong><div class="meta">${Math.round(f.kcal)} kcal / 100g</div></div></button>`).join("")}</div>
         <div class="list" id="mb-items">${builderItems.map((i, ix) => `
-          <div class="row mb-row">
+          <div class="row mb-row">${foodIcon(i, 26)}
             <div><strong>${escapeHtml(i.name)}</strong>
             <div class="meta"><input class="mb-grams" data-ix="${ix}" type="number" min="1" value="${i.amount}" /> g · ${i.kcal} kcal</div></div>
             <button class="x mb-x" data-ix="${ix}" type="button" aria-label="remove">×</button>
@@ -1155,6 +1179,7 @@ function fuel() {
       if (nq) nq.setSelectionRange(caret, caret);
     };
     wrap.querySelectorAll("#mb-hits .row").forEach((hitEl) => {
+      hitEl.insertAdjacentHTML("afterbegin", foodIcon(searchLocal(builderQuery).find((x) => x.id === hitEl.dataset.id) || { name: hitEl.textContent }, 26));
       hitEl.onclick = () => {
         const f = searchLocal(builderQuery).find((x) => x.id === hitEl.dataset.id);
         if (!f) return;
@@ -1231,6 +1256,7 @@ function fuel() {
           </div>
         </div>
       `);
+      row.insertAdjacentHTML("afterbegin", `<span class="food-ico meal-ico" style="--fh:var(--ember);width:30px;height:30px">${MEAL_ICON}</span>`);
       row.querySelector(".log-meal").onclick = () => {
         m.items.forEach((f) => {
           addFood(
