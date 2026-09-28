@@ -436,6 +436,20 @@ function weekStampOverlay() {
   return overlay;
 }
 
+function weekRing(n, total) {
+  const r = 26;
+  const c = 2 * Math.PI * r;
+  const dash = (Math.min(1, n / total) * c).toFixed(1);
+  return `
+    <svg class="week-ring" viewBox="0 0 64 64" role="img" aria-label="${n} of ${total} days settled">
+      <circle cx="32" cy="32" r="${r}" fill="none" stroke="var(--track)" stroke-width="5"/>
+      <circle cx="32" cy="32" r="${r}" fill="none" stroke="var(--ember)" stroke-width="5" stroke-linecap="round"
+        stroke-dasharray="${dash} ${c.toFixed(1)}" transform="rotate(-90 32 32)"/>
+      <text x="32" y="30" text-anchor="middle" class="week-ring-num">${n}</text>
+      <text x="32" y="42" text-anchor="middle" class="week-ring-sub">of ${total}</text>
+    </svg>`;
+}
+
 function drawWeekCard(card) {
   const weeks = state.weeks || [];
   const pending = pendingWeekDays(state);
@@ -444,7 +458,11 @@ function drawWeekCard(card) {
   if (pending.length >= WEEK_DAYS) {
     const rep = weekReport(pending, weeks[0]);
     html += `
-      <p class="week-tier">${escapeHtml(rep.tier)}</p>
+      <div class="week-top">
+        <p class="week-tier">${escapeHtml(rep.tier)}</p>
+        ${weekRing(n, WEEK_DAYS)}
+      </div>
+      <p class="lede">${escapeHtml(rep.narrative)}</p>
       <p class="lede">${escapeHtml(rep.narrative)}</p>
       ${dataRow("Avg calories", rep.stats.avgKcal.toLocaleString(), `${rep.stats.avgT} kcal`, rep.stats.avgT ? rep.stats.avgKcal / rep.stats.avgT : 0)}
       ${dataRow("Protein hits", `${rep.stats.proteinHits}`, `${WEEK_DAYS} days`, rep.stats.proteinHits / WEEK_DAYS)}
@@ -458,7 +476,10 @@ function drawWeekCard(card) {
   } else if (weeks.length) {
     const w = weeks[0];
     html += `
-      <p class="week-tier dim">${escapeHtml(w.tier)}</p>
+      <div class="week-top">
+        <p class="week-tier dim">${escapeHtml(w.tier)}</p>
+        ${weekRing(n, WEEK_DAYS)}
+      </div>
       <p class="lede">${escapeHtml(w.headline)} ${w.stats.avgDelta >= 0 ? "+" : ""}${w.stats.avgDelta} average. +${w.xpBonus} XP banked.</p>
       <div class="rank-track fat"><i style="width:${Math.round((n / WEEK_DAYS) * 100)}%"></i></div>
       <p class="tiny">Next week closes in ${WEEK_DAYS - n} more settled day${WEEK_DAYS - n === 1 ? "" : "s"}.</p>
@@ -468,8 +489,10 @@ function drawWeekCard(card) {
     `;
   } else {
     html += `
-      <p class="lede">${WEEK_DAYS - n} more settled day${WEEK_DAYS - n === 1 ? "" : "s"} until the first week verdict.</p>
-      <div class="rank-track fat"><i style="width:${Math.round((n / WEEK_DAYS) * 100)}%"></i></div>
+      <div class="week-top">
+        <p class="lede">${WEEK_DAYS - n} more settled day${WEEK_DAYS - n === 1 ? "" : "s"} until the first week verdict.</p>
+        ${weekRing(n, WEEK_DAYS)}
+      </div>
       <p class="tiny">Close your days — the week reads the ledger, not the live log.</p>
     `;
   }
@@ -1525,11 +1548,11 @@ function verdict() {
   const bars = hist30
     .map((h, i) => {
       const height = Math.max(2, (h.heat / 100) * 68);
-      return `<rect class="${h.delta >= 0 ? "up" : "down"}" x="${(i * barW + 1).toFixed(1)}" y="${(70 - height).toFixed(1)}" width="${Math.max(2, barW - 2).toFixed(1)}" height="${height.toFixed(1)}" rx="1.5"/>`;
+      return `<rect class="${h.delta >= 0 ? "up" : "down"}" x="${(i * barW + 1).toFixed(1)}" y="${(70 - height).toFixed(1)}" width="${Math.max(2, barW - 2).toFixed(1)}" height="${height.toFixed(1)}" rx="2"${h.delta >= 0 ? ' fill="url(#tg-grad)"' : ""}/>`;
     })
     .join("");
   const heatTrend = hist30.length
-    ? `<svg class="heat-trend" viewBox="0 0 320 72" preserveAspectRatio="none" role="img" aria-label="Heat over the last ${hist30.length} settled days">${bars}</svg>`
+    ? `<svg class="heat-trend" viewBox="0 0 320 72" preserveAspectRatio="none" role="img" aria-label="Heat over the last ${hist30.length} settled days"><defs><linearGradient id="tg-grad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff8a3d"/><stop offset="1" stop-color="#c24100"/></linearGradient></defs>${bars}</svg>`
     : "";
 
   const week = state.history.slice(0, 7);

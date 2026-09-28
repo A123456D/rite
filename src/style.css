@@ -1945,6 +1945,44 @@ h3,
   --float: 0 8px 24px rgba(0, 0, 0, 0.06);
 }
 
+/* --- The week: ring + tier -------------------------------------------------- */
+#week-card {
+  position: relative;
+}
+.week-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+.week-top .lede {
+  flex: 1;
+}
+.week-ring {
+  flex: none;
+  width: 62px;
+  height: 62px;
+}
+.week-ring-num {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 17px;
+  fill: var(--bright);
+}
+.week-ring-sub {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  fill: var(--mute);
+  text-transform: uppercase;
+}
+.heat-trend rect {
+  rx: 2px;
+}
+.heat-trend rect.up {
+  fill: url(#tg-grad);
+}
+
 /* --- Food category icon tiles -------------------------------------------- */
 .food-ico {
   flex: none;
