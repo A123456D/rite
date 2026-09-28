@@ -80,6 +80,7 @@ uniform float uSpeed;
 varying float vN;
 varying vec3 vNormal;
 varying vec3 vView;
+varying vec3 vWPos;
 ${NOISE_GLSL}
 void main() {
   float n1 = snoise(normal * 1.7 + vec3(0.0, uTime * uSpeed, uTime * uSpeed * 0.6));
@@ -87,7 +88,9 @@ void main() {
   float d = n1 * 0.72 + n2 * 0.28;
   vN = d;
   vec3 pos = position + normal * d * uAmp;
-  vec4 mv = modelViewMatrix * vec4(pos, 1.0);
+  vec4 wp = modelMatrix * vec4(pos, 1.0);
+  vWPos = wp.xyz;
+  vec4 mv = viewMatrix * wp;
   vNormal = normalize(normalMatrix * normal);
   vView = normalize(-mv.xyz);
   gl_Position = projectionMatrix * mv;
@@ -103,10 +106,19 @@ uniform float uDim;
 varying float vN;
 varying vec3 vNormal;
 varying vec3 vView;
+varying vec3 vWPos;
 void main() {
+  // faceted normals from screen-space derivatives: the molten crystal look
+  vec3 fdx = dFdx(vWPos);
+  vec3 fdy = dFdy(vWPos);
+  vec3 fn = normalize(cross(fdx, fdy));
   float t = smoothstep(-0.7, 0.95, vN);
   vec3 col = mix(uDeep, uMid, t);
   col = mix(col, uHot, smoothstep(0.55, 1.0, t));
+  float key = max(dot(fn, normalize(vec3(0.5, 0.8, 0.6))), 0.0);
+  float fill = max(dot(fn, normalize(vec3(-0.6, -0.2, 0.4))), 0.0);
+  col *= 0.5 + key * 0.8 + fill * 0.22;
+  col += uHot * pow(key, 3.0) * 0.3;
   float fr = pow(1.0 - max(dot(normalize(vNormal), normalize(vView)), 0.0), 2.4);
   col += uHot * fr * (0.5 + uGlow * 0.7);
   gl_FragColor = vec4(col * uDim, 1.0);
@@ -147,9 +159,25 @@ export async function createHeatCore(canvas, initialHeat = 50) {
     uHot: { value: hot },
   };
   const blob = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(1, 5),
+    new THREE.IcosahedronGeometry(1, 2),
     new THREE.ShaderMaterial({ uniforms, vertexShader: VERT, fragmentShader: FRAG })
   );
+
+  // twin orbit rings — the artifact floats inside a gyroscope
+  const ringMat = () =>
+    new THREE.MeshBasicMaterial({
+      color: hot,
+      transparent: true,
+      opacity: 0.3,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+  const ring1 = new THREE.Mesh(new THREE.RingGeometry(1.48, 1.51, 96), ringMat());
+  ring1.rotation.x = 1.25;
+  const ring2 = new THREE.Mesh(new THREE.RingGeometry(1.72, 1.745, 96), ringMat());
+  ring2.rotation.x = -0.85;
+  ring2.rotation.y = 0.45;
 
   // soft halo behind the blob
   const halo = new THREE.Sprite(
@@ -170,7 +198,7 @@ export async function createHeatCore(canvas, initialHeat = 50) {
   halo.scale.setScalar(3.4);
 
   // orbiting embers
-  const COUNT = 160;
+  const COUNT = 220;
   const positions = new Float32Array(COUNT * 3);
   for (let i = 0; i < COUNT; i++) {
     const r = 1.35 + Math.random() * 1.05;
@@ -198,7 +226,7 @@ export async function createHeatCore(canvas, initialHeat = 50) {
   const embers = new THREE.Points(emberGeo, emberMat);
 
   const group = new THREE.Group();
-  group.add(halo, blob, embers);
+  group.add(halo, blob, ring1, ring2, embers);
   scene.add(group);
 
   // heat drives everything; eased toward the live value
@@ -293,16 +321,21 @@ export async function createHeatCore(canvas, initialHeat = 50) {
     const h = heatShown;
     flareT *= 0.94;
     const f = flareT;
+    const pulse = 1 + 0.02 * Math.sin(t * 1.8);
 
     uniforms.uTime.value = t;
-    uniforms.uAmp.value = 0.08 + 0.3 * h + 0.18 * f;
+    uniforms.uAmp.value = 0.09 + 0.26 * h + 0.16 * f;
     uniforms.uSpeed.value = 0.3 + 1.0 * h;
     uniforms.uGlow.value = 0.15 + 0.85 * h + 0.9 * f;
-    uniforms.uDim.value = Math.min(1.4, 0.5 + 0.5 * h + 0.45 * f);
-    blob.scale.setScalar(0.5 + 0.55 * h + 0.1 * f);
+    uniforms.uDim.value = Math.min(1.4, 0.62 + 0.48 * h + 0.45 * f);
+    blob.scale.setScalar((0.58 + 0.5 * h + 0.1 * f) * pulse);
     halo.scale.setScalar(2.3 + 1.7 * h + 0.8 * f);
-    halo.material.opacity = Math.min(1, 0.22 + 0.55 * h + 0.4 * f);
-    emberMat.opacity = Math.min(1, 0.3 + 0.6 * h + 0.5 * f);
+    halo.material.opacity = Math.min(1, 0.26 + 0.55 * h + 0.4 * f);
+    ring1.material.opacity = 0.14 + 0.3 * h + 0.45 * f;
+    ring2.material.opacity = 0.1 + 0.24 * h + 0.35 * f;
+    ring1.rotation.z += 0.0032 + 0.004 * f;
+    ring2.rotation.z -= 0.0022 + 0.003 * f;
+    emberMat.opacity = Math.min(1, 0.32 + 0.58 * h + 0.5 * f);
     emberMat.size = 0.045 + 0.03 * h + 0.05 * f;
     targetRotY += 0.018 * f;
 
@@ -354,6 +387,10 @@ export async function createHeatCore(canvas, initialHeat = 50) {
       blob.material.dispose();
       emberGeo.dispose();
       emberMat.dispose();
+      ring1.geometry.dispose();
+      ring1.material.dispose();
+      ring2.geometry.dispose();
+      ring2.material.dispose();
       halo.material.map?.dispose();
       halo.material.dispose();
       emberMat.map?.dispose();
