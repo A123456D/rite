@@ -102,9 +102,11 @@ describe("backup roundtrip", () => {
     expect(fixed.days["2026-09-23"].foods[0].slot).toBe("snacks");
     expect(fixed.meals).toEqual([]);
   });
-  it("migrate keeps known themes including hud", () => {
-    expect(migrate({ theme: "hud" }).theme).toBe("hud");
-    expect(migrate({ theme: "vesper" }).theme).toBe("vesper");
+  it("migrate maps retired themes to the new lineup", () => {
+    expect(migrate({ theme: "vesper" }).theme).toBe("onyx");
+    expect(migrate({ theme: "nebula" }).theme).toBe("slate");
+    expect(migrate({ theme: "hud" }).theme).toBe("onyx");
+    expect(migrate({ theme: "auto" }).theme).toBe("auto");
     expect(migrate({}).theme).toBe("ember");
   });
 });

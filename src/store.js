@@ -53,7 +53,10 @@ export function migrate(state) {
       delete h.headline;
     }
   }
-  state.theme = ["ember", "vesper", "hud", "nebula", "aura", "sketch"].includes(state.theme) ? state.theme : "ember";
+  // retired palettes map to their closest new identity; "auto" follows the system
+  const themeMap = { vesper: "onyx", nebula: "slate", hud: "onyx" };
+  const themesOk = ["ember", "onyx", "slate", "aura", "sketch", "auto"];
+  state.theme = themesOk.includes(state.theme) ? state.theme : themeMap[state.theme] || "ember";
   for (const day of Object.values(state.days || {})) {
     for (const f of day.foods || []) {
       if (f.slot === "late") f.slot = "snacks";

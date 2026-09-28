@@ -1749,15 +1749,24 @@ function self() {
   const themeChips = box.querySelector("#theme-chips");
   const ACCENTS = {
     ember: "#ff5500",
-    vesper: "#a06bff",
-    hud: "#3fd8ff",
-    nebula: "#6fb0ff",
+    onyx: "#e8e6e1",
+    slate: "#45d6c0",
     aura: "#7c66f5",
     sketch: "#f04e23",
   };
+  const autoOn = state.theme === "auto";
+  const autoBtn = el(
+    `<button type="button" class="swatch ${autoOn ? "on" : ""}" aria-pressed="${autoOn}" aria-label="Auto theme — follows your system"><i style="background:linear-gradient(180deg,#15151a 50%,#f5f4f1 50%)"></i><span>Auto</span></button>`
+  );
+  autoBtn.onclick = () => {
+    state.theme = "auto";
+    persist();
+    render();
+  };
+  themeChips.append(autoBtn);
   Object.entries(THEMES).forEach(([id, meta]) => {
     const b = el(
-      `<button type="button" class="swatch ${(state.theme || "ember") === id ? "on" : ""}" aria-pressed="${(state.theme || "ember") === id}" aria-label="${meta.label} theme"><i style="background:${ACCENTS[id] || meta.color}"></i><span>${meta.label}</span></button>`
+      `<button type="button" class="swatch ${state.theme === id ? "on" : ""}" aria-pressed="${state.theme === id}" aria-label="${meta.label} theme"><i style="background:${ACCENTS[id] || meta.color}"></i><span>${meta.label}</span></button>`
     );
     b.onclick = () => {
       state.theme = id;
