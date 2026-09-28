@@ -547,6 +547,79 @@ function meterClass(value, target, invertOver = true) {
   return "";
 }
 
+const RING_METRICS = [
+  { key: "energy", label: "Energy", hue: null },
+  { key: "protein", label: "Protein", hue: "#ffb020" },
+  { key: "carbs", label: "Carbs", hue: "#e3c05a" },
+  { key: "fat", label: "Fat", hue: "#ff7a5c" },
+];
+
+function ringModule(t, tot, paceLine, trained) {
+  const R = 88;
+  const C = 2 * Math.PI * R;
+  const metrics = [
+    { ...RING_METRICS[0], val: tot.kcal, target: t.kcal || 1 },
+    { ...RING_METRICS[1], val: tot.protein, target: t.protein || 1 },
+    { ...RING_METRICS[2], val: tot.carbs, target: t.carbs || 1 },
+    { ...RING_METRICS[3], val: tot.fat, target: t.fat || 1 },
+  ];
+  const left = Math.max(0, Math.round(t.kcal - tot.kcal));
+  const over = tot.kcal > t.kcal;
+  const rings = metrics
+    .map((m, i) => {
+      const r = R - i * 15;
+      const c = 2 * Math.PI * r;
+      const pct = Math.max(0, Math.min(1, m.val / m.target));
+      const dash = (pct * c).toFixed(1);
+      const stroke = m.hue
+        ? m.hue
+        : "url(#ring-ember)";
+      return `
+        <circle class="ring-track" cx="100" cy="100" r="${r}" stroke-width="12" stroke-dasharray="${(c - 7).toFixed(1)} 7" style="--i:${i}"/>
+        <circle class="ring-fill" cx="100" cy="100" r="${r}" stroke="${stroke}" stroke-width="12" stroke-linecap="round"
+          stroke-dasharray="${dash} ${c.toFixed(1)}" stroke-dashoffset="${(-c / 4 + 3.5).toFixed(1)}"
+          transform="rotate(-90 100 100)" style="--i:${i}"/>`;
+    })
+    .join("");
+  const legend = metrics
+    .map((m) => {
+      const pct = Math.min(1, m.val / m.target);
+      const dot = m.hue || "#ff5500";
+      const unit = m.key === "energy" ? "" : " g";
+      return `
+        <div class="ring-legend-row">
+          <i style="background:${dot}"></i>
+          <span>${m.label}</span>
+          <b>${Math.round(m.val).toLocaleString()}<em> / ${Math.round(m.target).toLocaleString()}${unit}</em></b>
+        </div>`;
+    })
+    .join("");
+  return `
+    <div class="rings-card-in">
+      <div class="rings-wrap">
+        <svg viewBox="0 0 200 200" class="rings-svg" role="img" aria-label="today's macros">
+          <defs>
+            <linearGradient id="ring-ember" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#d34000"/>
+              <stop offset="100%" stop-color="#ff8a3d"/>
+            </linearGradient>
+          </defs>
+          ${rings}
+        </svg>
+        <div class="rings-center ${over ? "over" : ""}">
+          <b>${over ? "+" + Math.round(tot.kcal - t.kcal).toLocaleString() : left.toLocaleString()}</b>
+          <span>${over ? "kcal over" : "kcal left"}</span>
+        </div>
+      </div>
+      <div class="rings-legend">${legend}
+        <div class="ring-legend-row train ${trained ? "good" : ""}">
+          <i></i><span>Training</span><b class="train-word">${trained ? "Stoked" : "Silent"}</b>
+        </div>
+        ${paceLine ? `<div class="ring-pace">${paceLine}</div>` : ""}
+      </div>
+    </div>`;
+}
+
 function dayEndsIn() {
   const now = new Date();
   const cut = new Date(now);
@@ -628,20 +701,9 @@ function arena() {
         <p class="micro">${escapeHtml(coach.who)}</p>
         <p class="coach-line">${escapeHtml(coach.text)}</p>
       </section>
-      <section class="sect">
-        <p class="micro">Today · ${today}</p>
-        ${dataRow("Calories", Math.round(tot.kcal).toLocaleString(), `${t.kcal}`, t.kcal ? tot.kcal / t.kcal : 0, false, null, paceLine)}
-        ${dataRow("Protein", `${Math.round(tot.protein)}`, `${t.protein} g`, t.protein ? tot.protein / t.protein : 0, false, "#ffb020")}
-        ${dataRow("Carbs", `${Math.round(tot.carbs)}`, `${t.carbs} g`, t.carbs ? tot.carbs / t.carbs : 0, meterClass(tot.carbs, t.carbs) === "over", "#e3c05a")}
-        ${dataRow("Fat", `${Math.round(tot.fat)}`, `${t.fat} g`, t.fat ? tot.fat / t.fat : 0, meterClass(tot.fat, t.fat) === "over", "#ff7a5c")}
-        ${t.satfat ? dataRow("Saturated fat", `${Math.round(tot.satfat || 0)}`, `${t.satfat} g`, t.satfat ? (tot.satfat || 0) / t.satfat : 0, (tot.satfat || 0) > t.satfat, "#ff4d4d") : ""}
-        <div class="data-row train ${live.trained ? "good" : ""}">
-          <div class="dr-head">
-            <span>Training</span>
-            <b class="train-word">${live.trained ? "Stoked" : "Silent"}</b>
-          </div>
-          <div class="dr-meter"><i style="width:${live.trained ? 100 : 5}%"></i></div>
-        </div>
+      <section class="sect rings-sect">
+        <header class="kicker">Today · ${today}</header>
+        ${ringModule(t, tot, paceLine, live.trained)}
       </section>
       <section class="sect rank-sect">
         <div class="rank-line">
