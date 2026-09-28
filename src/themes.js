@@ -8,6 +8,7 @@ export const THEMES = {
   slate: { label: "Slate", color: "#0e141b", scheme: "dark" },
   aura: { label: "Aura", color: "#f5f4f1", scheme: "light" },
   sketch: { label: "Sketch", color: "#f1ebe1", scheme: "light" },
+  zen: { label: "Zen", color: "#ffffff", scheme: "light" },
 };
 
 function resolveTheme(name) {

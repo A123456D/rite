@@ -1753,6 +1753,7 @@ function self() {
     slate: "#45d6c0",
     aura: "#7c66f5",
     sketch: "#f04e23",
+    zen: "linear-gradient(180deg,#ffffff,#e8e8ed)",
   };
   const autoOn = state.theme === "auto";
   const autoBtn = el(

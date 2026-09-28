@@ -40,7 +40,7 @@ export function createFlame(canvas) {
   const theme = document.documentElement.dataset.theme;
   const hudMode = theme === "hud";
   // Additive glow is invisible on light paper — light themes composite normally.
-  const lightMode = theme === "sketch" || theme === "aura";
+  const lightMode = theme === "sketch" || theme === "aura" || theme === "zen";
   const la = lightMode ? 1.7 : 1; // alpha boost: no additive glow on white paper
   const t0 = performance.now();
   const rgba = rgbaHex;
