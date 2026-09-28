@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RITE · multi-width preview</title>
+    <style>
+      body {
+        margin: 0;
+        background: #101014;
+        padding: 18px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 22px;
+        justify-content: center;
+        align-items: flex-start;
+      }
+      .cell { text-align: center; }
+      .frame {
+        overflow: hidden;
+        border: 1px solid #333;
+        border-radius: 18px;
+        margin: 0 auto;
+      }
+      iframe { border: 0; display: block; }
+      .cap { color: #9a9a9a; font: 12px/1.4 system-ui, sans-serif; margin: 8px 0 0; }
+    </style>
+  </head>
+  <body>
+    <div class="cell">
+      <div class="frame" style="width:320px;height:568px"><iframe src="/" style="width:320px;height:568px" title="320x568"></iframe></div>
+      <p class="cap">320 × 568 · small</p>
+    </div>
+    <div class="cell">
+      <div class="frame" style="width:360px;height:740px"><iframe src="/" style="width:360px;height:740px" title="360x740"></iframe></div>
+      <p class="cap">360 × 740 · Android</p>
+    </div>
+    <div class="cell">
+      <div class="frame" style="width:390px;height:844px"><iframe src="/" style="width:390px;height:844px" title="390x844"></iframe></div>
+      <p class="cap">390 × 844 · iPhone</p>
+    </div>
+    <div class="cell">
+      <div class="frame" style="width:430px;height:932px"><iframe src="/" style="width:430px;height:932px" title="430x932"></iframe></div>
+      <p class="cap">430 × 932 · Pro Max</p>
+    </div>
+  </body>
+</html>
