@@ -614,6 +614,10 @@ function arena() {
         <p class="tiny rank-sub">${escapeHtml(r.title)} · ${state.xp} XP</p>
         <div class="rank-track fat"><i style="width:${Math.round(r.progress * 100)}%"></i></div>
       </section>
+      <section class="sect today-log">
+        <p class="micro">Today's log</p>
+        ${timeLogHtml(snap.day.foods)}
+      </section>
       ${heatStrip(heat)}
     </section>
   `);

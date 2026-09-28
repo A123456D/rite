@@ -373,6 +373,83 @@ h3,
   overflow: visible;
 }
 
+/* --- Bottom nav: floating glass pill -------------------------------------- */
+.nav {
+  position: fixed;
+  left: 50%;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  transform: translate3d(-50%, 0, 0);
+  width: min(428px, calc(100% - 20px));
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  padding: 8px;
+  margin: 0;
+  z-index: 40;
+  border-radius: 26px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  background: color-mix(in srgb, var(--panel) 84%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(1.25);
+  backdrop-filter: blur(16px) saturate(1.25);
+  box-shadow:
+    var(--float),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.nav button {
+  border: 0;
+  background: transparent;
+  color: var(--mute);
+  border-radius: 16px;
+  padding: 10px 4px 8px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  transition:
+    transform 0.18s var(--ease-spring),
+    color 0.2s ease,
+    background-color 0.2s ease;
+}
+.nav button:active {
+  transform: scale(0.92);
+}
+.nav .nav-ico {
+  width: 21px;
+  height: 21px;
+  display: block;
+}
+.nav .nav-ico svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.nav button.active {
+  background: linear-gradient(180deg, var(--ember), var(--ember-2));
+  color: var(--on-accent);
+  font-weight: 800;
+  box-shadow:
+    0 6px 18px rgba(var(--glow-rgb), 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transform: translateY(-2px);
+}
+.nav button.active .nav-ico {
+  filter: drop-shadow(0 0 6px rgba(var(--glow-rgb), 0.8));
+}
+.nav button:focus-visible {
+  outline: 2px solid var(--ember);
+  outline-offset: 2px;
+}
+
 /* --- Hero: the number is the interface ----------------------------------- */
 .hero-heat {
   padding-top: 40px;
