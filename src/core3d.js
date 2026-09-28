@@ -232,6 +232,8 @@ export async function createHeatCore(canvas, initialHeat = 50) {
   // heat drives everything; eased toward the live value
   let heat = initialHeat / 100;
   let heatShown = heat;
+  // per-band creature state, lerped smoothly between bands
+  const RED = new THREE.Color(1.0, 0.14, 0.08);
   let flareT = 0;
   let targetRotY = 0;
   let targetRotX = 0;
@@ -323,19 +325,39 @@ export async function createHeatCore(canvas, initialHeat = 50) {
     const f = flareT;
     const pulse = 1 + 0.02 * Math.sin(t * 1.8);
 
+    // band creature targets: husk (ash) -> waking -> baseline -> glowing -> hot -> violent
+    const B = [
+      { amp: 0.05, speed: 0.18, spin: 0.0008, red: 0, gray: 0.55, halo: 0.16, spark: 0 },
+      { amp: 0.07, speed: 0.26, spin: 0.0012, red: 0, gray: 0.3, halo: 0.22, spark: 0 },
+      { amp: 0.1, speed: 0.4, spin: 0.0018, red: 0, gray: 0, halo: 0.3, spark: 0 },
+      { amp: 0.16, speed: 0.75, spin: 0.0026, red: 0, gray: 0, halo: 0.42, spark: 0.4 },
+      { amp: 0.24, speed: 1.1, spin: 0.0036, red: 0.35, gray: 0, halo: 0.55, spark: 0.7 },
+      { amp: 0.34, speed: 1.6, spin: 0.005, red: 0.8, gray: 0, halo: 0.7, spark: 1 },
+    ];
+    const bi = Math.min(5, Math.floor(h * 6));
+    const bn = B[Math.min(5, bi + 1)];
+    const bf = h * 6 - bi;
+    const L = (a, b) => a + (b - a) * bf;
+    if (h > 0.86 && Math.random() < 0.12) spawn(2); // critical bursts
+
     uniforms.uTime.value = t;
-    uniforms.uAmp.value = 0.09 + 0.26 * h + 0.16 * f;
-    uniforms.uSpeed.value = 0.3 + 1.0 * h;
+    uniforms.uAmp.value = L(B[bi].amp, bn.amp) + 0.16 * f;
+    uniforms.uSpeed.value = L(B[bi].speed, bn.speed);
     uniforms.uGlow.value = 0.15 + 0.85 * h + 0.9 * f;
     uniforms.uDim.value = Math.min(1.4, 0.62 + 0.48 * h + 0.45 * f);
+    uniforms.uHot.value.copy(hot).lerp(RED, L(B[bi].red, bn.red));
     blob.scale.setScalar((0.58 + 0.5 * h + 0.1 * f) * pulse);
     halo.scale.setScalar(2.3 + 1.7 * h + 0.8 * f);
-    halo.material.opacity = Math.min(1, 0.26 + 0.55 * h + 0.4 * f);
+    halo.material.opacity = Math.min(1, L(B[bi].halo, bn.halo) + 0.35 * f);
     ring1.material.opacity = 0.14 + 0.3 * h + 0.45 * f;
     ring2.material.opacity = 0.1 + 0.24 * h + 0.35 * f;
     ring1.rotation.z += 0.0032 + 0.004 * f;
     ring2.rotation.z -= 0.0022 + 0.003 * f;
-    emberMat.opacity = Math.min(1, 0.32 + 0.58 * h + 0.5 * f);
+    // rings tilt toward the viewer as the fire builds
+    ring1.rotation.x = 1.25 - 0.35 * h - 0.2 * f;
+    ring2.rotation.x = -0.85 + 0.3 * h;
+    ring2.scale.setScalar(1 + 0.04 * Math.sin(t * 2.2) * (0.4 + h));
+    emberMat.opacity = Math.min(1, 0.32 + 0.58 * h + 0.5 * f + 0.4 * f * B[bi].spark);
     emberMat.size = 0.045 + 0.03 * h + 0.05 * f;
     targetRotY += 0.018 * f;
 

@@ -342,6 +342,7 @@ function render() {
           return;
         }
         core3d = inst;
+        window.__riteHeat = (v) => core3d && core3d.setHeat(v);
         if (pendingFlare) {
           core3d.flare(pendingFlare);
           pendingFlare = 0;
@@ -498,6 +499,7 @@ function chrome() {
   const h = el(`
     <header class="brand">
       <button type="button" class="wordmark" data-go="arena">${APP_NAME}</button>
+      <span class="brand-heat" aria-hidden="true"><b>${snapshot().heat}</b><i>HEAT</i></span>
       <button type="button" class="self-link" data-go="self">${rankMark(r.name, 18)} ${escapeHtml(r.name)} · ${state.streak}d streak</button>
     </header>
   `);
@@ -2065,5 +2067,44 @@ addEventListener("rite-notify", (e) => showToast(e.detail.body));
 startTicker(notifContext);
 setInterval(updateDeadlineNodes, 30000);
 
+let scrollFxInstalled = false;
+function updateScrollFx() {
+  const sy = window.scrollY || 0;
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const hero = document.querySelector(".heat-card");
+  const canvas = document.querySelector(".core3d");
+  const fig = document.querySelector(".heat-figure");
+  if (hero && canvas && !reduced) {
+    const d = Math.min(sy, hero.offsetHeight);
+    canvas.style.transform = `translateY(${Math.min(70, d * 0.2).toFixed(1)}px)`;
+    if (fig) fig.style.transform = `translateY(${Math.min(28, d * 0.07).toFixed(1)}px)`;
+  }
+  const bh = document.querySelector(".brand-heat");
+  if (bh) {
+    const p = Math.max(0, Math.min(1, (sy - 70) / 230));
+    bh.style.opacity = p.toFixed(2);
+    bh.style.transform = `translateY(${((1 - p) * 7).toFixed(1)}px)`;
+  }
+}
+function installScrollFx() {
+  if (scrollFxInstalled) return;
+  scrollFxInstalled = true;
+  let ticking = false;
+  addEventListener(
+    "scroll",
+    () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        updateScrollFx();
+        ticking = false;
+      });
+    },
+    { passive: true }
+  );
+}
+
 applyLaunchParams();
+installScrollFx();
 render();
+updateScrollFx();
