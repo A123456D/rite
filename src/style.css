@@ -1494,6 +1494,46 @@ h3,
   background: #000;
 }
 
+.stamp-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 16px;
+}
+.stamp-actions .btn {
+  padding: 13px 10px;
+  font-size: 12px;
+}
+/* Quick kcal: one line, no food lookup */
+.quick-row {
+  display: grid;
+  grid-template-columns: 1fr 76px auto;
+  gap: 8px;
+  align-items: end;
+  margin: 14px 0 2px;
+}
+.quick-row input {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 10px 2px;
+  outline: none;
+  color: var(--bright);
+  font-variant-numeric: tabular-nums;
+  transition: border-color 0.2s ease;
+}
+.quick-row input:focus {
+  border-bottom-color: var(--ember);
+}
+.quick-row .btn {
+  width: auto;
+  padding: 10px 18px;
+}
+.quick-row.locked {
+  opacity: 0.45;
+}
+
 /* --- Onboarding --------------------------------------------------------------------------- */
 .onboard {
   padding: 30px 22px 40px;

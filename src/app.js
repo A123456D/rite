@@ -46,6 +46,7 @@ import { searchLocal, scaleFood, rescaleItem, searchAnywhere, FOODS, getUsdaKey,
 import { SLOTS, defaultSlot, slotName, normalizeSlot, clockTime } from "./meals.js";
 import { barcodeSupported, lookupBarcode, scanBarcode } from "./barcode.js";
 import { createHeatCore } from "./core3d.js";
+import { shareWeekCard } from "./share-card.js";
 import { rankMark } from "./ranks.js";
 import { getConfig, setEnabled as setNotifEnabled, setSlot as setNotifSlot, permission as notifPermission, requestPermission, startTicker, tickNotifs, SLOTS as NOTIF_SLOTS } from "./notify.js";
 import { APP_NAME, THEMES, heatBand, applyTheme } from "./themes.js";
@@ -59,6 +60,7 @@ let tab = "arena";
 let core3d = null;
 let coreCanvas = null;
 let pendingFlare = 0;
+let focusQuick = false;
 let foodQuery = "";
 let foodHits = searchLocal("");
 let selectedFood = null;
@@ -385,13 +387,22 @@ function weekStampOverlay() {
         <div class="stamp-delta ${w.stats.avgDelta >= 0 ? "up" : "down"}">${w.stats.avgDelta >= 0 ? "+" : ""}${w.stats.avgDelta}<span> avg heat</span></div>
         <p class="stamp-body">${escapeHtml(w.narrative)}</p>
         <p class="tiny">+${w.xpBonus} XP banked</p>
-        <button class="btn" type="button">See the ledger</button>
+        <div class="stamp-actions">
+          <button class="btn" type="button">See the ledger</button>
+          <button class="btn ghost" type="button" id="share-stamp">Share</button>
+        </div>
       </div>
     </div>
   `);
-  overlay.querySelector("button").onclick = () => {
+  overlay.querySelector(".btn").onclick = () => {
     weekStamp = null;
     render();
+  };
+  overlay.querySelector("#share-stamp").onclick = async (e) => {
+    e.stopPropagation();
+    const res = await shareWeekCard(w, { streak: state.streak });
+    if (res === "shared") showToast("Verdict shared.");
+    if (res === "downloaded") showToast("Verdict image saved.");
   };
   return overlay;
 }
@@ -422,6 +433,9 @@ function drawWeekCard(card) {
       <p class="lede">${escapeHtml(w.headline)} ${w.stats.avgDelta >= 0 ? "+" : ""}${w.stats.avgDelta} average. +${w.xpBonus} XP banked.</p>
       <div class="rank-track fat"><i style="width:${Math.round((n / WEEK_DAYS) * 100)}%"></i></div>
       <p class="tiny">Next week closes in ${WEEK_DAYS - n} more settled day${WEEK_DAYS - n === 1 ? "" : "s"}.</p>
+      <div class="week-actions">
+        <button class="btn ghost" id="share-week" type="button">Share the verdict</button>
+      </div>
     `;
   } else {
     html += `
@@ -439,6 +453,14 @@ function drawWeekCard(card) {
       persist();
       weekStamp = res.record;
       render();
+    };
+  }
+  const share = card.querySelector("#share-week");
+  if (share) {
+    share.onclick = async () => {
+      const res = await shareWeekCard(weeks[0], { streak: state.streak });
+      if (res === "shared") showToast("Verdict shared.");
+      if (res === "downloaded") showToast("Verdict image saved.");
     };
   }
 }
@@ -652,6 +674,11 @@ function fuel() {
               : `Live heat ${snap.heat}. Logging ${slotName(mealSlot)}.`
         }</p>
         <div class="meter fat"><i style="width:${Math.min(100, (live.tot.kcal / Math.max(live.t.kcal, 1)) * 100)}%"></i></div>
+        <div class="quick-row ${locked ? "locked" : ""}">
+          <input id="quick-kcal" type="number" inputmode="numeric" min="0" placeholder="kcal" aria-label="Quick add kcal" ${locked ? "disabled" : ""} />
+          <input id="quick-pro" type="number" inputmode="numeric" min="0" placeholder="p" aria-label="Quick add protein" ${locked ? "disabled" : ""} />
+          <button class="btn" id="quick-log" type="button" ${locked ? "disabled" : ""}>Log</button>
+        </div>
         <div class="chips" id="modes"></div>
         <div class="chips" id="slots"></div>
         <div class="week-strip ${fuelMode === "plan" ? "" : "hidden"}" id="week"></div>
@@ -703,6 +730,21 @@ function fuel() {
   `);
 
   const modes = box.querySelector("#modes");
+  box.querySelector("#quick-log").onclick = () => {
+    if (locked) return;
+    const kcal = Math.round(Number(box.querySelector("#quick-kcal").value)) || 0;
+    if (kcal <= 0) return;
+    const pro = Math.round(Number(box.querySelector("#quick-pro").value)) || 0;
+    const wasPlan = fuelMode;
+    fuelMode = "log"; // a quick kcal always lands on today, never the plan
+    commitFood({ name: `Quick ${kcal}`, kcal, protein: pro, carbs: 0, fat: 0, amount: 1, unit: "serving" });
+    fuelMode = wasPlan;
+    render();
+  };
+  if (focusQuick) {
+    focusQuick = false;
+    box.querySelector("#quick-kcal")?.focus();
+  }
   [
     ["log", "Log"],
     ["plan", "Plan"],
@@ -1739,8 +1781,43 @@ function showToast(text) {
   setTimeout(() => t.remove(), 5200);
 }
 
+// Launch paths: PWA shortcuts (?slot=…, ?quick=1) and the share target
+// (?text=… "200g chicken rice" → pre-filled search with grams).
+function applyLaunchParams() {
+  const params = new URLSearchParams(location.search);
+  const slot = params.get("slot");
+  const quick = params.get("quick");
+  const text = (params.get("text") || params.get("title") || "").trim();
+  if (slot) {
+    mealSlot = normalizeSlot(slot) || mealSlot;
+    fuelMode = "log";
+    tab = "fuel";
+  }
+  if (quick === "1") {
+    tab = "fuel";
+    focusQuick = true;
+  }
+  if (text) {
+    const grams = text.match(/^\s*(\d+(?:\.\d+)?)\s*g(?:ram[s]?)?\b/i);
+    if (grams) {
+      pendingGrams = Number(grams[1]);
+      foodQuery = text.slice(grams[0].length).trim();
+    } else {
+      foodQuery = text;
+    }
+    if (foodQuery) {
+      foodHits = searchLocal(foodQuery);
+    }
+    tab = "fuel";
+  }
+  if (slot || quick || text) {
+    history.replaceState(null, "", location.pathname);
+  }
+}
+
 addEventListener("rite-notify", (e) => showToast(e.detail.body));
 startTicker(notifContext);
 setInterval(updateDeadlineNodes, 30000);
 
+applyLaunchParams();
 render();
