@@ -37,7 +37,9 @@ export function targets(profile) {
   const cuts = { cut: 0.8, recomp: 0.92, bulk: 1.1 };
   const kcal = Math.round(tdee * (cuts[profile.goal] || 0.92));
   const protein = Math.round(profile.kg * (profile.goal === "cut" ? 2.0 : 1.8));
-  return { tdee, kcal, protein, fat: Math.round((kcal * 0.28) / 9), carbs: Math.round((kcal - protein * 4 - (kcal * 0.28)) / 4) };
+  // saturated-fat cap: keep under 10% of calories (AHA guidance)
+  const satfat = Math.max(10, Math.round((kcal * 0.1) / 9));
+  return { tdee, kcal, protein, fat: Math.round((kcal * 0.28) / 9), carbs: Math.round((kcal - protein * 4 - (kcal * 0.28)) / 4), satfat };
 }
 
 export function currentKg(state) {
@@ -129,9 +131,10 @@ export function dayTotals(day) {
       acc.protein += f.protein;
       acc.carbs += f.carbs || 0;
       acc.fat += f.fat || 0;
+      acc.satfat += f.satfat || 0;
       return acc;
     },
-    { kcal: 0, protein: 0, carbs: 0, fat: 0 }
+    { kcal: 0, protein: 0, carbs: 0, fat: 0, satfat: 0 }
   );
 }
 

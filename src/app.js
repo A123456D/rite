@@ -417,7 +417,7 @@ function drawWeekCard(card) {
     html += `
       <p class="week-tier">${escapeHtml(rep.tier)}</p>
       <p class="lede">${escapeHtml(rep.narrative)}</p>
-      ${dataRow("Avg energy", rep.stats.avgKcal.toLocaleString(), `${rep.stats.avgT} kcal`, rep.stats.avgT ? rep.stats.avgKcal / rep.stats.avgT : 0)}
+      ${dataRow("Avg calories", rep.stats.avgKcal.toLocaleString(), `${rep.stats.avgT} kcal`, rep.stats.avgT ? rep.stats.avgKcal / rep.stats.avgT : 0)}
       ${dataRow("Protein hits", `${rep.stats.proteinHits}`, `${WEEK_DAYS} days`, rep.stats.proteinHits / WEEK_DAYS)}
       ${dataRow("Trained", `${rep.stats.trainedDays}`, `${WEEK_DAYS} days`, rep.stats.trainedDays / WEEK_DAYS)}
       ${dataRow("Avg heat", `${rep.stats.avgHeat}`, "100", rep.stats.avgHeat / 100)}
@@ -594,10 +594,11 @@ function arena() {
       </section>
       <section class="sect">
         <p class="micro">Today · ${today}</p>
-        ${dataRow("Energy", Math.round(tot.kcal).toLocaleString(), `${t.kcal}`, t.kcal ? tot.kcal / t.kcal : 0)}
+        ${dataRow("Calories", Math.round(tot.kcal).toLocaleString(), `${t.kcal}`, t.kcal ? tot.kcal / t.kcal : 0)}
         ${dataRow("Protein", `${Math.round(tot.protein)}`, `${t.protein} g`, t.protein ? tot.protein / t.protein : 0)}
         ${dataRow("Carbs", `${Math.round(tot.carbs)}`, `${t.carbs} g`, t.carbs ? tot.carbs / t.carbs : 0, meterClass(tot.carbs, t.carbs) === "over")}
         ${dataRow("Fat", `${Math.round(tot.fat)}`, `${t.fat} g`, t.fat ? tot.fat / t.fat : 0, meterClass(tot.fat, t.fat) === "over")}
+        ${t.satfat ? dataRow("Saturated fat", `${Math.round(tot.satfat || 0)}`, `${t.satfat} g`, t.satfat ? (tot.satfat || 0) / t.satfat : 0, (tot.satfat || 0) > t.satfat) : ""}
         <div class="data-row train ${live.trained ? "good" : ""}">
           <div class="dr-head">
             <span>Training</span>
@@ -722,6 +723,7 @@ function fuel() {
           <div class="field"><label>Protein</label><input id="cpro" type="number" value="10" /></div>
           <div class="field"><label>Carbs</label><input id="ccarb" type="number" value="20" /></div>
           <div class="field"><label>Fat</label><input id="cfat" type="number" value="8" /></div>
+          <div class="field"><label>Sat fat (g)</label><input id="csat" type="number" value="0" /></div>
         </div>
         <button class="btn ghost" type="button" id="cadd" ${locked ? "disabled" : ""}>${fuelMode === "plan" ? "Add custom to plan" : "Log custom"}</button>
       </div>
@@ -1169,7 +1171,8 @@ function fuel() {
     const protein = Number(box.querySelector("#cpro").value) || 0;
     const carbs = Number(box.querySelector("#ccarb").value) || 0;
     const fat = Number(box.querySelector("#cfat").value) || 0;
-    const custom = { id: "custom-" + name.toLowerCase(), name, kcal, protein, carbs, fat, unit: "serving" };
+    const satfat = Number(box.querySelector("#csat").value) || 0;
+    const custom = { id: "custom-" + name.toLowerCase(), name, kcal, protein, carbs, fat, unit: "serving", ...(satfat > 0 ? { satfat } : {}) };
     commitFood(
       {
         id: crypto.randomUUID(),
@@ -1180,6 +1183,7 @@ function fuel() {
         protein,
         carbs,
         fat,
+        ...(satfat > 0 ? { satfat } : {}),
         slot: mealSlot,
       },
       custom,

@@ -141,6 +141,9 @@ export async function searchUsda(q) {
         fat: nutrient(p, [1004], ["total lipid", "fat"]),
         unit: "100g",
         source: "USDA",
+        ...(nutrient(p, [1258], ["saturated"]) > 0
+          ? { satfat: nutrient(p, [1258], ["saturated"]) }
+          : {}),
       };
     })
     .filter(Boolean);
@@ -165,6 +168,9 @@ async function searchOffLegacy(parsed) {
         fat: Number(n.fat_100g || 0),
         unit: "100g",
         source: "OFF",
+        ...(Number(n["saturated-fat_100g"] || 0) > 0
+          ? { satfat: Number(n["saturated-fat_100g"]) }
+          : {}),
       };
     })
     .filter(Boolean);
@@ -194,6 +200,9 @@ async function searchOffAlicious(parsed) {
         fat: Number(n.fat_100g || 0),
         unit: "100g",
         source: "OFF",
+        ...(Number(n["saturated-fat_100g"] || 0) > 0
+          ? { satfat: Number(n["saturated-fat_100g"]) }
+          : {}),
       };
     })
     .filter(Boolean);
@@ -251,7 +260,7 @@ export function scaleFood(food, amount) {
   const base = food.unit === "serving" ? 1 : 100;
   const mul = amount / base;
   const round = (n) => Math.round(n * 10) / 10;
-  return {
+  const out = {
     name: food.name,
     amount,
     unit: food.unit === "serving" ? "serving" : "g",
@@ -264,13 +273,18 @@ export function scaleFood(food, amount) {
     // without needing the pantry entry around.
     base: { kcal: food.kcal, protein: food.protein, carbs: food.carbs || 0, fat: food.fat || 0, unit: base },
   };
+  if (food.satfat != null) {
+    out.satfat = round(food.satfat * mul);
+    out.base.satfat = food.satfat;
+  }
+  return out;
 }
 
 export function rescaleItem(item, amount) {
   if (!item.base) return null;
   const mul = amount / item.base.unit;
   const round = (n) => Math.round(n * 10) / 10;
-  return {
+  const out = {
     ...item,
     amount,
     kcal: Math.round(item.base.kcal * mul),
@@ -278,4 +292,6 @@ export function rescaleItem(item, amount) {
     carbs: round(item.base.carbs * mul),
     fat: round(item.base.fat * mul),
   };
+  if (item.base.satfat != null) out.satfat = round(item.base.satfat * mul);
+  return out;
 }

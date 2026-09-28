@@ -29,6 +29,9 @@ export async function lookupBarcode(code) {
     protein: Number(n.proteins_100g || 0),
     carbs: Number(n.carbohydrates_100g || 0),
     fat: Number(n.fat_100g || 0),
+    ...(Number(n["saturated-fat_100g"] || 0) > 0
+      ? { satfat: Number(n["saturated-fat_100g"]) }
+      : {}),
     unit: useServing ? "serving" : "100g",
     grams: useServing ? Math.round(servingQ) : null,
     source: "OFF",

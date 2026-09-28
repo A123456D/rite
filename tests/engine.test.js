@@ -206,7 +206,7 @@ describe("dayTotals", () => {
         { kcal: 250, protein: 5, carbs: 30, fat: 12 },
       ],
     });
-    expect(tot).toEqual({ kcal: 350, protein: 15, carbs: 30, fat: 12 });
+    expect(tot).toEqual({ kcal: 350, protein: 15, carbs: 30, fat: 12, satfat: 0 });
   });
 });
 
