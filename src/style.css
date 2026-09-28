@@ -388,7 +388,9 @@ h3,
   position: relative;
   display: grid;
   place-items: center;
-  margin: 6px 0 2px;
+  /* the canvas is 300px centered on the numeral — clear its lower half so
+     the heat-line reads on dark instead of inside the glow */
+  margin: 6px 0 100px;
 }
 .core3d {
   position: absolute;
@@ -1522,6 +1524,9 @@ h3,
   }
   .heat-figure b {
     font-size: 150px;
+  }
+  .heat-core {
+    margin-bottom: 86px;
   }
   .sect,
   .glass.pad,
